@@ -1,0 +1,21 @@
+refresh_devices:
+  name: Refresh devices
+  description: Manually refresh device data from Loca API
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Optional config entry ID to refresh. If not provided, refreshes all entries.
+      required: false
+      selector:
+        text:
+
+force_update:
+  name: Force device update
+  description: Force an immediate update for a specific device
+  fields:
+    device_id:
+      name: Device ID
+      description: The ID of the device to update
+      required: true
+      selector:
+        text:

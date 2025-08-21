@@ -1,0 +1,24 @@
+# Services for the Loca Device Tracker integration
+
+refresh_devices:
+  name: Refresh devices
+  description: Manually refresh device data from the Loca API
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: Specific config entry to refresh (optional)
+      example: "01234567890abcdef01234567890abcdef"
+      selector:
+        text:
+
+force_update:
+  name: Force update
+  description: Force an immediate update for a specific device
+  fields:
+    device_id:
+      name: Device ID
+      description: Device ID to update
+      required: true
+      example: "12345"
+      selector:
+        text:

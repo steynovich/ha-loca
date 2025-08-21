@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configurar Loca Device Tracker",
+        "description": "Ingrese sus credenciales de la API de Loca para conectar sus dispositivos a Home Assistant.",
+        "data": {
+          "api_key": "API key",
+          "username": "Nombre de usuario", 
+          "password": "Contraseña"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reautenticar cuenta Loca",
+        "description": "Las credenciales de la API de Loca para {username} necesitan ser actualizadas. Por favor ingrese sus credenciales actuales.",
+        "data": {
+          "api_key": "API key",
+          "username": "Nombre de usuario", 
+          "password": "Contraseña"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Error al conectar con la API de Loca. Por favor verifique su conexión de red e intente nuevamente.",
+      "invalid_auth": "Credenciales de autenticación inválidas. Por favor verifique su clave API, nombre de usuario y contraseña.",
+      "unknown": "Error inesperado. Por favor intente nuevamente."
+    },
+    "abort": {
+      "already_configured": "La cuenta ya está configurada",
+      "reauth_successful": "Reautenticación exitosa"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Loca",
+        "description": "Configure las opciones para su integración de Loca.",
+        "data": {
+          "scan_interval": "Intervalo de actualización (segundos)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Batería"
+      },
+      "last_seen": {
+        "name": "Visto por última vez"
+      },
+      "location_accuracy": {
+        "name": "Precisión de ubicación"
+      },
+      "speed": {
+        "name": "Velocidad"
+      },
+      "asset_info": {
+        "name": "Información del vehículo"
+      },
+      "location_update": {
+        "name": "Configuración actualización ubicación"
+      },
+      "location": {
+        "name": "Ubicación",
+        "state": {
+          "unknown_address": "Dirección desconocida",
+          "unknown_location": "Ubicación desconocida"
+        }
+      }
+    },
+    "device_tracker": {
+      "default": {
+        "name": "Rastreador de dispositivos"
+      }
+    }
+  },
+  "issues": {
+    "api_authentication_failed": {
+      "title": "Fallo en autenticación API",
+      "description": "La autenticación de la API de Loca para {account} ha fallado. Por favor verifique sus credenciales y reautentíquese."
+    },
+    "no_devices_found": {
+      "title": "No se encontraron dispositivos",
+      "description": "No se encontraron dispositivos para la cuenta Loca {account}. Esto es normal para cuentas nuevas. Si tiene dispositivos, asegúrese de que estén configurados correctamente y activos en su cuenta Loca."
+    }
+  }
+}

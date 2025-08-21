@@ -1,0 +1,8 @@
+{
+  "name": "Loca Device Tracker",
+  "hacs": "1.32.0",
+  "homeassistant": "2023.8.0",
+  "render_readme": true,
+  "zip_release": true,
+  "filename": "loca.zip"
+}

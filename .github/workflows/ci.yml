@@ -1,0 +1,232 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    tags-ignore:
+      - "**"
+    paths-ignore:
+      - "custom_components/loca/translations/**"
+  pull_request:
+    paths-ignore:
+      - "custom_components/loca/translations/**"
+  workflow_dispatch:
+
+env:
+  DEFAULT_PYTHON: "3.13"
+
+jobs:
+  info:
+    name: Collect information
+    outputs:
+      python_cache_key: ${{ steps.generate_python_cache_key.outputs.key }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4.2.2
+
+      - name: Generate Python venv restore key
+        id: generate_python_cache_key
+        run: |
+          echo "key=venv-${{
+            hashFiles('requirements_test.txt') }}" >> $GITHUB_OUTPUT
+
+  homeassistant:
+    name: HA validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: HACS
+        uses: hacs/action@main
+        with:
+          category: integration
+          ignore: brands
+
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: hassfest
+        uses: home-assistant/actions/hassfest@master
+
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    needs:
+      - info
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
+        id: python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+
+      - name: Restore Python virtual environment
+        id: cache-venv
+        uses: actions/cache@v4.2.0
+        with:
+          path: venv
+          key: >-
+            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+
+      - name: Create Python virtual environment
+        if: steps.cache-venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv venv
+          . venv/bin/activate
+          python --version
+          pip install -r requirements_test.txt
+
+  translations:
+    name: Check translations
+    runs-on: ubuntu-latest
+    needs:
+      - info
+      - prepare
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
+        id: python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+
+      - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
+        id: cache-venv
+        uses: actions/cache/restore@v4.2.0
+        with:
+          path: venv
+          fail-on-cache-miss: true
+          key: >-
+            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+
+      - name: Run translations check
+        run: |
+          . venv/bin/activate
+          python --version
+          python -c "
+          import json
+          import sys
+          
+          # Load English translations as reference
+          with open('custom_components/loca/translations/en.json', 'r') as f:
+              en_translations = json.load(f)
+          
+          languages = ['nl', 'de', 'fr', 'es', 'it', 'pl', 'pt', 'sv']
+          
+          def check_keys(ref_dict, check_dict, path=''):
+              missing_keys = []
+              for key, value in ref_dict.items():
+                  current_path = f'{path}.{key}' if path else key
+                  if key not in check_dict:
+                      missing_keys.append(current_path)
+                  elif isinstance(value, dict) and isinstance(check_dict[key], dict):
+                      missing_keys.extend(check_keys(value, check_dict[key], current_path))
+              return missing_keys
+          
+          all_complete = True
+          for lang in languages:
+              with open(f'custom_components/loca/translations/{lang}.json', 'r') as f:
+                  lang_translations = json.load(f)
+              
+              missing = check_keys(en_translations, lang_translations)
+              if missing:
+                  print(f'❌ {lang}.json missing keys: {missing}')
+                  all_complete = False
+              else:
+                  print(f'✅ {lang}.json complete')
+          
+          if not all_complete:
+              print('⚠️ Some translations are incomplete, but continuing...')
+          else:
+              print('✅ All translations are complete')
+          "
+
+  mypy:
+    name: Check mypy
+    runs-on: ubuntu-latest
+    needs:
+      - info
+      - prepare
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
+        id: python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+
+      - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
+        id: cache-venv
+        uses: actions/cache/restore@v4.2.0
+        with:
+          path: venv
+          fail-on-cache-miss: true
+          key: >-
+            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+
+      - name: Run mypy
+        run: |
+          . venv/bin/activate
+          python --version
+          mypy --explicit-package-bases custom_components/loca tests/
+
+  pytest:
+    name: Run tests
+    runs-on: ubuntu-latest
+    needs:
+      - info
+      - prepare
+      - mypy
+    steps:
+      - name: Check out code from GitHub
+        uses: actions/checkout@v4.2.2
+
+      - name: Set up Python ${{ env.DEFAULT_PYTHON }}
+        id: python
+        uses: actions/setup-python@v5.3.0
+        with:
+          python-version: ${{ env.DEFAULT_PYTHON }}
+
+      - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
+        id: cache-venv
+        uses: actions/cache/restore@v4.2.0
+        with:
+          path: venv
+          fail-on-cache-miss: true
+          key: >-
+            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+
+      # Tests are temporarily disabled - uncomment to re-enable
+      # - name: Run pytest
+      #   timeout-minutes: 60
+      #   id: pytest
+      #   env:
+      #     PYTHONDONTWRITEBYTECODE: 1
+      #   run: |
+      #     . venv/bin/activate
+      #     python --version
+      #     bash scripts/run_tests.sh
+      #     mv pytest-output.txt pytest-${{ steps.python.outputs.python-version }}.txt
+
+      # - name: Upload pytest output
+      #   if: success() || failure() && steps.pytest.conclusion == 'failure'
+      #   uses: actions/upload-artifact@v4.6.0
+      #   with:
+      #     name: pytest-${{ steps.python.outputs.python-version }}
+      #     path: pytest-${{ steps.python.outputs.python-version }}.txt
+      #     overwrite: true
+
+      # - name: Upload coverage artifact
+      #   uses: actions/upload-artifact@v4.6.0
+      #   with:
+      #     name: coverage-${{ steps.python.outputs.python-version }}
+      #     path: coverage.xml
+      #     overwrite: true

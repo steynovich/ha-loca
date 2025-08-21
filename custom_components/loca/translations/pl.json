@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Skonfiguruj Loca Device Tracker",
+        "description": "Wprowadź swoje dane uwierzytelniające API Loca, aby połączyć urządzenia z Home Assistant.",
+        "data": {
+          "api_key": "API key",
+          "username": "Nazwa użytkownika", 
+          "password": "Hasło"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ponownie uwierzytelnij konto Loca",
+        "description": "Dane uwierzytelniające API Loca dla {username} wymagają aktualizacji. Wprowadź swoje obecne dane.",
+        "data": {
+          "api_key": "API key",
+          "username": "Nazwa użytkownika", 
+          "password": "Hasło"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie udało się połączyć z API Loca. Sprawdź połączenie sieciowe i spróbuj ponownie.",
+      "invalid_auth": "Nieprawidłowe dane uwierzytelniające. Sprawdź klucz API, nazwę użytkownika i hasło.",
+      "unknown": "Wystąpił nieoczekiwany błąd. Spróbuj ponownie."
+    },
+    "abort": {
+      "already_configured": "Konto jest już skonfigurowane",
+      "reauth_successful": "Ponowne uwierzytelnienie zakończone sukcesem"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Loca",
+        "description": "Skonfiguruj opcje dla integracji Loca.",
+        "data": {
+          "scan_interval": "Interwał aktualizacji (sekundy)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Bateria"
+      },
+      "last_seen": {
+        "name": "Ostatnio widziany"
+      },
+      "location_accuracy": {
+        "name": "Dokładność lokalizacji"
+      },
+      "speed": {
+        "name": "Prędkość"
+      },
+      "asset_info": {
+        "name": "Informacje o pojeździe"
+      },
+      "location_update": {
+        "name": "Konfiguracja aktualizacji lokalizacji"
+      },
+      "location": {
+        "name": "Lokalizacja",
+        "state": {
+          "unknown_address": "Nieznany adres",
+          "unknown_location": "Nieznana lokalizacja"
+        }
+      }
+    },
+    "device_tracker": {
+      "default": {
+        "name": "Śledzenie urządzeń"
+      }
+    }
+  },
+  "issues": {
+    "api_authentication_failed": {
+      "title": "Uwierzytelnienie API nieudane",
+      "description": "Uwierzytelnienie API Loca dla {account} nie powiodło się. Sprawdź dane uwierzytelniające i uwierzytelnij ponownie."
+    },
+    "no_devices_found": {
+      "title": "Nie znaleziono urządzeń",
+      "description": "Nie znaleziono urządzeń dla konta Loca {account}. To normalne dla nowych kont. Jeśli masz urządzenia, upewnij się, że są prawidłowo skonfigurowane i aktywne w koncie Loca."
+    }
+  }
+}

@@ -1,0 +1,14 @@
+# Testing requirements for Loca integration
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-homeassistant-custom-component>=0.13.0
+pytest-mock>=3.10.0
+pytest-cov>=4.0.0
+pytest-xdist>=3.0.0
+
+# Type checking and linting
+mypy>=1.0.0
+ruff>=0.1.0
+
+# Home Assistant core for testing
+homeassistant>=2023.8.0

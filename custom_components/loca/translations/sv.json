@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Konfigurera Loca Device Tracker",
+        "description": "Ange dina Loca API-uppgifter för att ansluta dina enheter till Home Assistant.",
+        "data": {
+          "api_key": "API key",
+          "username": "Användarnamn", 
+          "password": "Lösenord"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Återautentisera Loca-konto",
+        "description": "Loca API-uppgifterna för {username} behöver uppdateras. Ange dina nuvarande uppgifter.",
+        "data": {
+          "api_key": "API key",
+          "username": "Användarnamn", 
+          "password": "Lösenord"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Misslyckades att ansluta till Loca API. Kontrollera din nätverksanslutning och försök igen.",
+      "invalid_auth": "Ogiltiga autentiseringsuppgifter. Kontrollera din API-nyckel, användarnamn och lösenord.",
+      "unknown": "Oväntat fel inträffade. Försök igen."
+    },
+    "abort": {
+      "already_configured": "Kontot är redan konfigurerat",
+      "reauth_successful": "Återautentisering lyckades"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Loca-alternativ",
+        "description": "Konfigurera alternativ för din Loca-integration.",
+        "data": {
+          "scan_interval": "Uppdateringsintervall (sekunder)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Batteri"
+      },
+      "last_seen": {
+        "name": "Senast sedd"
+      },
+      "location_accuracy": {
+        "name": "Positionsnoggrannhet"
+      },
+      "speed": {
+        "name": "Hastighet"
+      },
+      "asset_info": {
+        "name": "Fordonsinformation"
+      },
+      "location_update": {
+        "name": "Konfiguration positionsuppdatering"
+      },
+      "location": {
+        "name": "Position",
+        "state": {
+          "unknown_address": "Okänd adress",
+          "unknown_location": "Okänd position"
+        }
+      }
+    },
+    "device_tracker": {
+      "default": {
+        "name": "Enhetsspårare"
+      }
+    }
+  },
+  "issues": {
+    "api_authentication_failed": {
+      "title": "API-autentisering misslyckades",
+      "description": "Loca API-autentiseringen för {account} misslyckades. Kontrollera dina uppgifter och autentisera igen."
+    },
+    "no_devices_found": {
+      "title": "Inga enheter hittades",
+      "description": "Inga enheter hittades för Loca-kontot {account}. Detta är normalt för nya konton. Om du har enheter, se till att de är korrekt konfigurerade och aktiva i ditt Loca-konto."
+    }
+  }
+}

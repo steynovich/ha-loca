@@ -1,0 +1,88 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Loca Apparaat Tracker instellen",
+        "description": "Voer uw Loca API-gegevens in om uw apparaten te verbinden met Home Assistant.",
+        "data": {
+          "api_key": "API key",
+          "username": "Gebruikersnaam", 
+          "password": "Wachtwoord"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Loca Account Opnieuw Authenticeren",
+        "description": "De Loca API-gegevens voor {username} moeten worden bijgewerkt. Voer uw huidige gegevens in.",
+        "data": {
+          "api_key": "API key",
+          "username": "Gebruikersnaam", 
+          "password": "Wachtwoord"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kan geen verbinding maken met Loca API. Controleer uw netwerkverbinding en probeer het opnieuw.",
+      "invalid_auth": "Ongeldige authenticatiegegevens. Controleer uw API-key, gebruikersnaam en wachtwoord.",
+      "unknown": "Onverwachte fout opgetreden. Probeer het opnieuw."
+    },
+    "abort": {
+      "already_configured": "Account is al geconfigureerd",
+      "reauth_successful": "Herauthenticatie succesvol"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Loca Opties",
+        "description": "Configureer opties voor uw Loca integratie.",
+        "data": {
+          "scan_interval": "Update interval (seconden)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "battery": {
+        "name": "Batterij"
+      },
+      "last_seen": {
+        "name": "Laatst gezien"
+      },
+      "location_accuracy": {
+        "name": "Locatienauwkeurigheid"
+      },
+      "speed": {
+        "name": "Snelheid"
+      },
+      "asset_info": {
+        "name": "Voertuiginformatie"
+      },
+      "location_update": {
+        "name": "Locatie Update Configuratie"
+      },
+      "location": {
+        "name": "Locatie",
+        "state": {
+          "unknown_address": "Onbekend adres",
+          "unknown_location": "Onbekende locatie"
+        }
+      }
+    },
+    "device_tracker": {
+      "default": {
+        "name": "Apparaattracker"
+      }
+    }
+  },
+  "issues": {
+    "api_authentication_failed": {
+      "title": "API-authenticatie mislukt",
+      "description": "De Loca API-authenticatie voor {account} is mislukt. Controleer uw gegevens en authenticeer opnieuw."
+    },
+    "no_devices_found": {
+      "title": "Geen apparaten gevonden",
+      "description": "Er zijn geen apparaten gevonden voor het Loca-account {account}. Dit is normaal voor nieuwe accounts. Als u wel apparaten heeft, zorg er dan voor dat ze correct zijn geconfigureerd en actief zijn in uw Loca-account."
+    }
+  }
+}
