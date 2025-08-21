@@ -7,6 +7,8 @@ from typing import Any
 
 import aiohttp
 from aiohttp import ClientSession, ClientTimeout
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import aiohttp_client
 
 from .const import (
     API_ASSETS_ENDPOINT,
@@ -29,12 +31,14 @@ class LocaAPI:
         api_key: str, 
         username: str, 
         password: str, 
+        hass: HomeAssistant | None = None,
         session: ClientSession | None = None
     ) -> None:
         """Initialize the API client."""
         self._api_key = api_key
         self._username = username
         self._password = password
+        self._hass = hass
         self._session: ClientSession | None = session
         self._authenticated = False
         self._groups_cache: dict[int, str] = {}
@@ -42,13 +46,18 @@ class LocaAPI:
     async def _get_session(self) -> ClientSession:
         """Get or create aiohttp session."""
         if self._session is None:
-            timeout = ClientTimeout(total=30)
-            jar = aiohttp.CookieJar(unsafe=True)
-            self._session = ClientSession(
-                timeout=timeout,
-                cookie_jar=jar,
-                headers={"Content-Type": "application/json"},
-            )
+            if self._hass:
+                # Use Home Assistant's shared session when available
+                self._session = aiohttp_client.async_get_clientsession(self._hass)
+            else:
+                # Fallback for testing or standalone use
+                timeout = ClientTimeout(total=30)
+                jar = aiohttp.CookieJar(unsafe=True)
+                self._session = ClientSession(
+                    timeout=timeout,
+                    cookie_jar=jar,
+                    headers={"Content-Type": "application/json"},
+                )
         return self._session
 
     async def authenticate(self) -> bool:
@@ -677,7 +686,8 @@ class LocaAPI:
         if self._authenticated:
             await self.logout()
             
-        if self._session:
+        # Don't close the session if it's managed by Home Assistant
+        if self._session and not self._hass:
             await self._session.close()
             self._session = None
         self._authenticated = False

@@ -38,7 +38,7 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
             config_entry.data[CONF_API_KEY],
             config_entry.data[CONF_USERNAME], 
             config_entry.data[CONF_PASSWORD],
-            aiohttp_client.async_get_clientsession(hass),
+            hass=hass,
         )
         self._empty_device_count = 0
 

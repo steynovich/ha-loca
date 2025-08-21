@@ -36,7 +36,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         data[CONF_API_KEY], 
         data[CONF_USERNAME], 
         data[CONF_PASSWORD],
-        aiohttp_client.async_get_clientsession(hass),
+        hass=hass,
     )
     
     try:
