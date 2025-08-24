@@ -31,6 +31,9 @@ async def async_setup_entry(
         entities.append(LocaDeviceTracker(coordinator, device_id))
     
     async_add_entities(entities)
+    
+    # Note: New devices added after setup will appear after integration reload.
+    # This is a Home Assistant limitation for device tracker entities.
 
 
 class LocaDeviceTracker(CoordinatorEntity, TrackerEntity):
@@ -86,7 +89,8 @@ class LocaDeviceTracker(CoordinatorEntity, TrackerEntity):
         """Return the device state attributes."""
         attributes = {}
         
-        if last_seen := self.device_data.get("last_seen"):
+        last_seen = self.device_data.get("last_seen")
+        if last_seen and hasattr(last_seen, 'isoformat'):
             attributes["last_seen"] = last_seen.isoformat()
         
         if self.device_data.get("location_source"):

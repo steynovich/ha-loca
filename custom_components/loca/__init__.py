@@ -23,8 +23,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
-    # Set up services on first integration setup
-    if not hass.services.has_service(DOMAIN, "refresh_devices"):
+    # Set up services on first integration setup (thread-safe check)
+    # Only set up services if this is the first config entry
+    if len(hass.config_entries.async_entries(DOMAIN)) == 1:
         await async_setup_services(hass)
     
     return True

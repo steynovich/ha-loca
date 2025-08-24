@@ -89,6 +89,9 @@ async def async_setup_entry(
             entities.append(LocaSensor(coordinator, device_id, sensor_type))
     
     async_add_entities(entities)
+    
+    # Note: New devices added after setup will appear after integration reload.
+    # This is a Home Assistant limitation for sensor entities.
 
 
 class LocaSensor(CoordinatorEntity, SensorEntity):
@@ -215,24 +218,29 @@ class LocaSensor(CoordinatorEntity, SensorEntity):
                 # Convert timeofday to HH:MM format
                 # Format: timeofday like 91000 means 9:10 (HHMM * 100 + SS format)
                 timeofday = location_update.get("timeofday", 0)
-                if timeofday:
-                    # Parse format: HHMM00 or similar (e.g., 91000 = 9:10)
-                    if timeofday >= 1000:
-                        # Extract hours and minutes from HHMM00 format
-                        hours = timeofday // 10000
-                        minutes = (timeofday % 10000) // 100
-                        # Ensure valid time range
-                        hours = min(23, max(0, hours))
-                        minutes = min(59, max(0, minutes))
-                        attributes["update_time"] = f"{hours:02d}:{minutes:02d}"
-                    else:
-                        # Fallback: treat as seconds since midnight
-                        timeofday = timeofday % 86400
-                        hours = timeofday // 3600
-                        minutes = (timeofday % 3600) // 60
-                        hours = min(23, max(0, hours))
-                        minutes = min(59, max(0, minutes))
-                        attributes["update_time"] = f"{hours:02d}:{minutes:02d}"
+                if timeofday and isinstance(timeofday, (int, float)):
+                    try:
+                        timeofday = int(timeofday)
+                        # Parse format: HHMM00 or similar (e.g., 91000 = 9:10)
+                        if timeofday >= 1000:
+                            # Extract hours and minutes from HHMM00 format
+                            hours = timeofday // 10000 if timeofday >= 10000 else 0
+                            minutes = (timeofday % 10000) // 100 if timeofday >= 100 else 0
+                            # Ensure valid time range
+                            hours = min(23, max(0, hours))
+                            minutes = min(59, max(0, minutes))
+                            attributes["update_time"] = f"{hours:02d}:{minutes:02d}"
+                        else:
+                            # Fallback: treat as seconds since midnight
+                            timeofday = abs(timeofday) % 86400
+                            hours = timeofday // 3600 if timeofday >= 3600 else 0
+                            minutes = (timeofday % 3600) // 60 if timeofday >= 60 else 0
+                            hours = min(23, max(0, hours))
+                            minutes = min(59, max(0, minutes))
+                            attributes["update_time"] = f"{hours:02d}:{minutes:02d}"
+                    except (ValueError, TypeError):
+                        # If parsing fails, don't add the update_time attribute
+                        pass
                 
                 attributes.update({
                     "frequency": location_update.get("frequency", 0),

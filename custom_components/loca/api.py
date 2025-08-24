@@ -42,6 +42,11 @@ class LocaAPI:
         self._session: ClientSession | None = session
         self._authenticated = False
         self._groups_cache: dict[int, str] = {}
+    
+    @property
+    def is_authenticated(self) -> bool:
+        """Return whether the API client is authenticated."""
+        return self._authenticated
 
     async def _get_session(self) -> ClientSession:
         """Get or create aiohttp session."""
@@ -51,11 +56,10 @@ class LocaAPI:
                 self._session = aiohttp_client.async_get_clientsession(self._hass)
             else:
                 # Fallback for testing or standalone use
+                # Note: Caller is responsible for closing this session
                 timeout = ClientTimeout(total=30)
-                jar = aiohttp.CookieJar(unsafe=True)
                 self._session = ClientSession(
                     timeout=timeout,
-                    cookie_jar=jar,
                     headers={"Content-Type": "application/json"},
                 )
         return self._session
@@ -615,70 +619,6 @@ class LocaAPI:
             "attributes": location,
         }
 
-    def parse_device_data(self, asset: dict[str, Any]) -> dict[str, Any]:
-        """Parse device data from API response."""
-        device_id = str(asset.get("id", ""))
-        name = asset.get("name", f"Loca Device {device_id}")
-        
-        # Debug logging to understand API response structure
-        _LOGGER.debug("Raw asset data for device %s: %s", device_id, asset)
-        
-        # Get the latest location data - try different possible field names
-        location_data = asset.get("lastlocation", {})
-        if not location_data:
-            # Try alternative field names
-            location_data = asset.get("last_location", {})
-        if not location_data:
-            location_data = asset.get("location", {})
-        if not location_data:
-            # Maybe location data is directly in the asset
-            if asset.get("lat") or asset.get("latitude"):
-                location_data = asset
-        
-        _LOGGER.debug("Location data for device %s: %s", device_id, location_data)
-        
-        # Try multiple field name variations for latitude/longitude
-        latitude = 0.0
-        longitude = 0.0
-        
-        # Check for lat/lng
-        if location_data.get("lat"):
-            latitude = float(location_data.get("lat", 0))
-        elif location_data.get("latitude"):
-            latitude = float(location_data.get("latitude", 0))
-            
-        if location_data.get("lng"):
-            longitude = float(location_data.get("lng", 0))
-        elif location_data.get("lon"):
-            longitude = float(location_data.get("lon", 0))
-        elif location_data.get("longitude"):
-            longitude = float(location_data.get("longitude", 0))
-        
-        _LOGGER.debug("Parsed coordinates for device %s: lat=%s, lng=%s", device_id, latitude, longitude)
-        
-        # Parse timestamp
-        timestamp = location_data.get("time", 0)
-        if timestamp:
-            last_seen = datetime.fromtimestamp(int(timestamp))
-        else:
-            last_seen = None
-        
-        # Get device attributes
-        battery_level = asset.get("battery", 0)
-        gps_accuracy = location_data.get("accuracy", 0)
-        origin_type = location_data.get("origin", 1)  # 1=GPS, 2=LBS
-        
-        return {
-            "device_id": device_id,
-            "name": name,
-            "latitude": latitude,
-            "longitude": longitude,
-            "battery_level": int(battery_level) if battery_level else None,
-            "gps_accuracy": int(gps_accuracy) if gps_accuracy else 100,  # Default 100m accuracy
-            "last_seen": last_seen,
-            "location_source": "GPS" if origin_type == 1 else "Cell Tower",
-            "attributes": asset,
-        }
 
     async def close(self) -> None:
         """Close the API session."""

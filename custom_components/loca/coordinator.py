@@ -57,7 +57,7 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
         """Update data via library."""
         try:
             # Try to authenticate if not already done
-            if not self.api._authenticated:
+            if not self.api.is_authenticated:
                 auth_success = await self.api.authenticate()
                 if not auth_success:
                     raise ConfigEntryAuthFailed("Authentication failed")
@@ -72,7 +72,7 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
             
             # Handle empty status list
             if not status_list:
-                if self.api._authenticated:
+                if self.api.is_authenticated:
                     _LOGGER.info("No devices found in Loca StatusList - account may be empty or devices not configured")
                     # Only create repair issue if this persists (not on first few attempts)
                     self._empty_device_count += 1
