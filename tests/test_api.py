@@ -22,9 +22,10 @@ def api() -> LocaAPI:
 
 @pytest.fixture
 def api_with_session() -> LocaAPI:
-    """Create a test API instance with external session."""
-    mock_session = MagicMock(spec=ClientSession)
-    return LocaAPI("test_api_key", "test_user", "test_password", mock_session)
+    """Create a test API instance with hass."""
+    mock_hass = MagicMock()
+    mock_hass.data = {}
+    return LocaAPI("test_api_key", "test_user", "test_password", hass=mock_hass)
 
 
 @pytest.fixture
@@ -160,12 +161,14 @@ class TestLocaAPIInitialization:
         assert api._password == "test_password"
         assert api._session is None
         assert api._authenticated is False
+        assert api.is_authenticated is False  # Test public property
         assert api._groups_cache == {}
         
-    def test_init_with_external_session(self, api_with_session: LocaAPI) -> None:
-        """Test initialization with external session."""
-        assert api_with_session._session is not None
-        assert isinstance(api_with_session._session, MagicMock)
+    def test_init_with_hass(self, api_with_session: LocaAPI) -> None:
+        """Test initialization with Home Assistant instance."""
+        # Session will be created from hass when needed
+        assert api_with_session._hass is not None
+        assert api_with_session._session is None  # Not created yet
 
 
 class TestSessionManagement:
@@ -184,7 +187,6 @@ class TestSessionManagement:
             assert api._session == mock_session
             mock_session_class.assert_called_once_with(
                 timeout=ClientTimeout(total=30),
-                cookie_jar=ANY,
                 headers={"Content-Type": "application/json"},
             )
     
@@ -199,22 +201,28 @@ class TestSessionManagement:
         assert session == existing_session
     
     @pytest.mark.asyncio
-    async def test_get_session_uses_external(self, api_with_session: LocaAPI) -> None:
-        """Test using external session."""
-        session = await api_with_session._get_session()
-        assert session == api_with_session._session
+    async def test_get_session_with_hass(self, api_with_session: LocaAPI) -> None:
+        """Test getting session from Home Assistant."""
+        # With hass set, it will try to get session from hass
+        with patch("custom_components.loca.api.aiohttp_client.async_get_clientsession") as mock_get_session:
+            mock_session = MagicMock()
+            mock_get_session.return_value = mock_session
+            session = await api_with_session._get_session()
+            assert session == mock_session
+            mock_get_session.assert_called_once_with(api_with_session._hass)
     
     @pytest.mark.asyncio
     async def test_close_with_session(self, api: LocaAPI, mock_session: MagicMock) -> None:
-        """Test closing API with session."""
+        """Test closing API with session (no hass)."""
         api._session = mock_session
         api._authenticated = True
+        api._hass = None  # Ensure we're testing the standalone case
         
         with patch.object(api, "logout", new_callable=AsyncMock) as mock_logout:
             await api.close()
             
             mock_logout.assert_called_once()
-            mock_session.close.assert_called_once()
+            mock_session.close.assert_called_once()  # Session closed only when not managed by hass
             assert api._session is None
             assert api._authenticated is False
     
@@ -399,57 +407,6 @@ class TestAssetManagement:
 
 class TestDataParsing:
     """Test data parsing functionality."""
-    
-    def test_parse_device_data_complete(self, api: LocaAPI) -> None:
-        """Test parsing complete device data."""
-        asset = {
-            "id": "12345",
-            "name": "Test Device",
-            "battery": 85,
-            "lastlocation": {
-                "lat": 52.3676,
-                "lng": 4.9041,
-                "time": 1640995200,
-                "accuracy": 5,
-                "origin": 1,
-            },
-        }
-        
-        result = api.parse_device_data(asset)
-        
-        assert result["device_id"] == "12345"
-        assert result["name"] == "Test Device"
-        assert result["latitude"] == 52.3676
-        assert result["longitude"] == 4.9041
-        assert result["battery_level"] == 85
-        assert result["gps_accuracy"] == 5
-        assert result["location_source"] == "GPS"
-        assert isinstance(result["last_seen"], datetime)
-    
-    def test_parse_device_data_minimal(self, api: LocaAPI) -> None:
-        """Test parsing minimal device data."""
-        asset = {"id": "67890"}
-        
-        result = api.parse_device_data(asset)
-        
-        assert result["device_id"] == "67890"
-        assert result["name"] == "Loca Device 67890"
-        assert result["latitude"] == 0
-        assert result["longitude"] == 0
-        assert result["battery_level"] is None
-        assert result["gps_accuracy"] == 100
-        assert result["last_seen"] is None
-    
-    def test_parse_device_data_cell_tower(self, api: LocaAPI) -> None:
-        """Test parsing device data with cell tower location."""
-        asset = {
-            "id": "12345",
-            "lastlocation": {"origin": 2}
-        }
-        
-        result = api.parse_device_data(asset)
-        
-        assert result["location_source"] == "Cell Tower"
     
     def test_parse_status_as_device_complete(self, api: LocaAPI) -> None:
         """Test parsing complete status data."""
