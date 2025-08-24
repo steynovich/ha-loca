@@ -83,6 +83,11 @@ Simply update the integration through HACS or manually replace the `loca` folder
 **Removed**
 - Unused `parse_device_data` method
 
+**Testing**
+- Fixed test suite compatibility with refactored code
+- Updated test fixtures for new API signature
+- Improved test coverage for session management
+
 ---
 
 **Compatibility**: Home Assistant 2024.1.0+
