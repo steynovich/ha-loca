@@ -164,9 +164,14 @@ class TestConfigFlow:
         user_input: dict[str, str],
     ) -> None:
         """Test we abort if already configured."""
+        import hashlib
+        # Create unique_id that matches the new format with hash
+        api_key_hash = hashlib.sha256(user_input[CONF_API_KEY].encode()).hexdigest()[:8]
+        unique_id = f"{user_input[CONF_USERNAME]}_{api_key_hash}"
+        
         existing_entry = MockConfigEntry(
             domain=DOMAIN,
-            unique_id="test_user",
+            unique_id=unique_id,
             data=user_input,
         )
         existing_entry.add_to_hass(hass)

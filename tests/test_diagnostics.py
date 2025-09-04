@@ -122,11 +122,12 @@ class TestDiagnostics:
         
         diagnostics = await async_get_device_diagnostics(hass, mock_config_entry, mock_device)
         
-        # Should return the specific device data
+        # Should return the specific device data with sensitive info redacted
         assert diagnostics["device_id"] == "device1"
         assert diagnostics["name"] == "Test Car"
-        assert diagnostics["latitude"] == 52.1234
-        assert diagnostics["longitude"] == 4.5678
+        assert diagnostics["latitude"] == "**REDACTED**"
+        assert diagnostics["longitude"] == "**REDACTED**"
+        assert diagnostics["has_gps_data"] == True
         assert diagnostics["asset_info"]["brand"] == "BMW"
 
     @pytest.mark.asyncio

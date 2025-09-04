@@ -52,8 +52,6 @@ async def async_get_config_entry_diagnostics(
             ],
             # Don't expose actual API credentials - only indicate if they're configured
             "credentials_configured": bool(coordinator.api._api_key and coordinator.api._username),
-            "api_key_length": len(coordinator.api._api_key) if coordinator.api._api_key else 0,
-            "username_length": len(coordinator.api._username) if coordinator.api._username else 0,
         },
     }
     
@@ -61,13 +59,14 @@ async def async_get_config_entry_diagnostics(
     if coordinator.data:
         devices_info = []
         for device_id, device_data in coordinator.data.items():
-            # Include full device data for diagnostics
+            # Include device data with privacy-sensitive information redacted
             device_info = {
                 "device_id": device_id,
                 "name": device_data.get("name", "Unknown"),
                 "battery_level": device_data.get("battery_level"),
-                "latitude": device_data.get("latitude"),
-                "longitude": device_data.get("longitude"),
+                "latitude": "**REDACTED**" if device_data.get("latitude") is not None else None,
+                "longitude": "**REDACTED**" if device_data.get("longitude") is not None else None,
+                "has_gps_data": device_data.get("latitude") is not None and device_data.get("longitude") is not None,
                 "gps_accuracy": device_data.get("gps_accuracy"),
                 "last_seen": device_data.get("last_seen").isoformat() if device_data.get("last_seen") else None,
                 "asset_info": device_data.get("asset_info"),
@@ -100,5 +99,22 @@ async def async_get_device_diagnostics(
     
     device_data = coordinator.data[device_id]
     
-    # Return full device data for diagnostics
-    return device_data
+    # Return device data with sensitive location information redacted
+    return {
+        "device_id": device_id,
+        "name": device_data.get("name", "Unknown"),
+        "battery_level": device_data.get("battery_level"),
+        "latitude": "**REDACTED**" if device_data.get("latitude") is not None else None,
+        "longitude": "**REDACTED**" if device_data.get("longitude") is not None else None,
+        "has_gps_data": device_data.get("latitude") is not None and device_data.get("longitude") is not None,
+        "gps_accuracy": device_data.get("gps_accuracy"),
+        "last_seen": device_data.get("last_seen").isoformat() if device_data.get("last_seen") else None,
+        "asset_info": device_data.get("asset_info"),
+        "address": "**REDACTED**" if device_data.get("address") else None,
+        "speed": device_data.get("speed"),
+        "heading": device_data.get("heading"),
+        "altitude": device_data.get("altitude"),
+        "group_name": device_data.get("group_name"),
+        "is_online": device_data.get("is_online"),
+        "motion_state": device_data.get("motion_state"),
+    }

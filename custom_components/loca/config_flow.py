@@ -1,6 +1,7 @@
 """Config flow for Loca Device Tracker integration."""
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -152,8 +153,10 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:
-                # Use combination of username and API key for unique_id to support multiple accounts
-                unique_id = f"{user_input[CONF_USERNAME]}_{user_input[CONF_API_KEY][:8]}"
+                # Use combination of username and hash of API key for unique_id to support multiple accounts
+                # Hash the API key to avoid exposing any part of the actual credential
+                api_key_hash = hashlib.sha256(user_input[CONF_API_KEY].encode()).hexdigest()[:8]
+                unique_id = f"{user_input[CONF_USERNAME]}_{api_key_hash}"
                 await self.async_set_unique_id(unique_id)
                 self._abort_if_unique_id_configured()
                 return self.async_create_entry(title=info["title"], data=user_input)
