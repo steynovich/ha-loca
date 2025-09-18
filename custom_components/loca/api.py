@@ -23,6 +23,77 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
+class APIResponseHelper:
+    """Helper class for processing API responses."""
+
+    @staticmethod
+    def extract_error_message(data: dict[str, Any]) -> str | None:
+        """Extract error message from API response data."""
+        for field in ["message", "error", "description", "detail", "reason"]:
+            if data.get(field):
+                return data.get(field)
+        return None
+
+    @staticmethod
+    def format_dutch_address(address_data: dict[str, Any]) -> str | None:
+        """Format address using Dutch conventions: Street Number, Zipcode City, Country."""
+        address_parts = []
+
+        # Street and number (e.g., "Brouwerstraat 30")
+        if address_data.get("street") and address_data.get("number"):
+            address_parts.append(f"{address_data['street']} {address_data['number']}")
+        elif address_data.get("street"):
+            address_parts.append(address_data["street"])
+
+        # Zipcode and city (e.g., "2984AR Ridderkerk")
+        zipcode_city = []
+        if address_data.get("zipcode"):
+            zipcode_city.append(address_data["zipcode"])
+        if address_data.get("city"):
+            zipcode_city.append(address_data["city"])
+
+        if zipcode_city:
+            address_parts.append(" ".join(zipcode_city))
+
+        # Country (e.g., "Netherlands")
+        if address_data.get("country"):
+            address_parts.append(address_data["country"])
+
+        return ", ".join(address_parts) if address_parts else None
+
+    @staticmethod
+    def parse_timestamp(timestamp: Any) -> datetime | None:
+        """Parse timestamp from various formats."""
+        if not timestamp:
+            return None
+        try:
+            from datetime import timezone
+            return datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+        except (ValueError, TypeError) as e:
+            _LOGGER.debug("Could not parse timestamp %s: %s", timestamp, e)
+            return None
+
+    @staticmethod
+    def safe_int_conversion(value: Any, default: int = 0) -> int:
+        """Safely convert value to int with fallback."""
+        if value is None:
+            return default
+        try:
+            return int(float(value))
+        except (ValueError, TypeError):
+            return default
+
+    @staticmethod
+    def safe_float_conversion(value: Any, default: float = 0.0) -> float:
+        """Safely convert value to float with fallback."""
+        if value is None:
+            return default
+        try:
+            return float(value)
+        except (ValueError, TypeError):
+            return default
+
+
 class LocaAPI:
     """Class to communicate with the Loca API."""
 
@@ -64,66 +135,95 @@ class LocaAPI:
                 )
         return self._session
 
-    async def authenticate(self) -> bool:
-        """Authenticate with the Loca API."""
-        # Validate required credentials
+    def _validate_credentials(self) -> bool:
+        """Validate that all required credentials are provided."""
         if not self._api_key or not self._username or not self._password:
-            _LOGGER.error("Missing required credentials - API key: %s, Username: %s, Password: %s", 
-                         bool(self._api_key), bool(self._username), bool(self._password))
+            _LOGGER.error("Missing required credentials - API key: %s, Username: %s, Password: %s",
+                         sanitize_for_logging(self._api_key, show_length=False),
+                         sanitize_for_logging(self._username, show_length=False),
+                         sanitize_for_logging(self._password, show_length=False))
             return False
-        
-        session = await self._get_session()
-        
-        login_data = {
+        return True
+
+    async def _test_connectivity(self, session: ClientSession) -> None:
+        """Test basic connectivity to the API endpoint."""
+        try:
+            async with session.get(API_BASE_URL.replace('/v1', '')) as test_response:
+                _LOGGER.debug("API server connectivity test - Status: %s", test_response.status)
+        except Exception as connectivity_err:
+            _LOGGER.warning("API connectivity test failed: %s", connectivity_err)
+
+    def _prepare_login_data(self) -> dict[str, str]:
+        """Prepare login data for authentication request."""
+        return {
             "key": self._api_key,
             "username": self._username,
             "password": self._password,
         }
-        
+
+    def _process_auth_response(self, data: dict[str, Any]) -> bool:
+        """Process authentication response data."""
+        # Loca API returns a 'user' object on successful login (no 'status' field)
+        if data.get("user") and isinstance(data.get("user"), dict):
+            user_info = data["user"]
+            self._authenticated = True
+            _LOGGER.info("Successfully authenticated with Loca API for user: %s (ID: %s)",
+                        user_info.get("username", self._username),
+                        user_info.get("userid", "unknown"))
+            return True
+        else:
+            # No user object found - authentication failed
+            _LOGGER.error("Authentication failed for user '%s' - No user object in response. Full response: %s", self._username, data)
+
+            # Check for error fields
+            error_detail = APIResponseHelper.extract_error_message(data)
+
+            if error_detail:
+                _LOGGER.error("API error message: %s", error_detail)
+
+            return False
+
+    def _handle_auth_error(self, err: Exception) -> None:
+        """Handle authentication errors with specific error messages."""
+        _LOGGER.exception("Network or connection error during authentication for user '%s': %s", self._username, err)
+        # Provide specific error messages for common issues
+        error_str = str(err).lower()
+        if "cannot connect to host" in error_str or "name or service not known" in error_str:
+            _LOGGER.error("Cannot connect to Loca API server. Check internet connection and API endpoint: %s", API_BASE_URL)
+        elif "ssl" in error_str or "certificate" in error_str:
+            _LOGGER.error("SSL/TLS error connecting to Loca API. This might be a certificate issue.")
+        elif "timeout" in error_str:
+            _LOGGER.error("Timeout connecting to Loca API. Check internet connection and firewall settings.")
+        elif "403" in error_str or "forbidden" in error_str:
+            _LOGGER.error("Access forbidden by Loca API. Check your API key permissions.")
+        elif "404" in error_str:
+            _LOGGER.error("Loca API endpoint not found. API might be down or URL incorrect: %s/%s", API_BASE_URL, API_LOGIN_ENDPOINT)
+
+    async def authenticate(self) -> bool:
+        """Authenticate with the Loca API."""
+        if not self._validate_credentials():
+            return False
+
+        session = await self._get_session()
+        login_data = self._prepare_login_data()
+
         _LOGGER.debug("Attempting authentication for user '%s' with API key length %d", self._username, len(self._api_key))
-        
+
         try:
-            # First test basic connectivity to the API endpoint
-            try:
-                async with session.get(API_BASE_URL.replace('/v1', '')) as test_response:
-                    _LOGGER.debug("API server connectivity test - Status: %s", test_response.status)
-            except Exception as connectivity_err:
-                _LOGGER.warning("API connectivity test failed: %s", connectivity_err)
-            
+            # Test basic connectivity first
+            await self._test_connectivity(session)
+
             async with session.post(
                 f"{API_BASE_URL}/{API_LOGIN_ENDPOINT}",
                 json=login_data,
             ) as response:
                 _LOGGER.debug("Authentication request to %s returned status %s", f"{API_BASE_URL}/{API_LOGIN_ENDPOINT}", response.status)
-                
-                if response.status == 200:
+
+                if response.status == HTTPStatus.OK:
                     try:
                         data = await response.json()
                         _LOGGER.debug("Authentication response data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
-                        
-                        # Loca API returns a 'user' object on successful login (no 'status' field)
-                        if data.get("user") and isinstance(data.get("user"), dict):
-                            user_info = data["user"]
-                            self._authenticated = True
-                            _LOGGER.info("Successfully authenticated with Loca API for user: %s (ID: %s)", 
-                                        user_info.get("username", self._username), 
-                                        user_info.get("userid", "unknown"))
-                            return True
-                        else:
-                            # No user object found - authentication failed
-                            _LOGGER.error("Authentication failed for user '%s' - No user object in response. Full response: %s", self._username, data)
-                            
-                            # Check for error fields
-                            error_detail = None
-                            for field in ["message", "error", "description", "detail", "reason"]:
-                                if data.get(field):
-                                    error_detail = data.get(field)
-                                    break
-                            
-                            if error_detail:
-                                _LOGGER.error("API error message: %s", error_detail)
-                            
-                            return False
+                        return self._process_auth_response(data)
                     except Exception as json_err:
                         response_text = await response.text()
                         _LOGGER.error("Failed to parse JSON response for user '%s'. Error: %s, Response: %s", self._username, json_err, response_text[:200])
@@ -135,21 +235,9 @@ class LocaAPI:
                     except Exception:
                         _LOGGER.error("Authentication failed for user '%s' with HTTP status %s (could not read response)", self._username, response.status)
                     return False
-                    
+
         except Exception as err:
-            _LOGGER.exception("Network or connection error during authentication for user '%s': %s", self._username, err)
-            # Provide specific error messages for common issues
-            error_str = str(err).lower()
-            if "cannot connect to host" in error_str or "name or service not known" in error_str:
-                _LOGGER.error("Cannot connect to Loca API server. Check internet connection and API endpoint: %s", API_BASE_URL)
-            elif "ssl" in error_str or "certificate" in error_str:
-                _LOGGER.error("SSL/TLS error connecting to Loca API. This might be a certificate issue.")
-            elif "timeout" in error_str:
-                _LOGGER.error("Timeout connecting to Loca API. Check internet connection and firewall settings.")
-            elif "403" in error_str or "forbidden" in error_str:
-                _LOGGER.error("Access forbidden by Loca API. Check your API key permissions.")
-            elif "404" in error_str:
-                _LOGGER.error("Loca API endpoint not found. API might be down or URL incorrect: %s/%s", API_BASE_URL, API_LOGIN_ENDPOINT)
+            self._handle_auth_error(err)
             return False
 
     async def logout(self) -> bool:
@@ -164,7 +252,7 @@ class LocaAPI:
                 f"{API_BASE_URL}/{API_LOGOUT_ENDPOINT}",
                 json={"key": self._api_key},
             ) as response:
-                if response.status == 200:
+                if response.status == HTTPStatus.OK:
                     data = await response.json()
                     if data.get("status") == "ok":
                         self._authenticated = False
@@ -194,7 +282,7 @@ class LocaAPI:
                 f"{API_BASE_URL}/{API_ASSETS_ENDPOINT}",
                 json={"key": self._api_key},
             ) as response:
-                if response.status == 200:
+                if response.status == HTTPStatus.OK:
                     data = await response.json()
                     _LOGGER.debug("Assets response data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
                     _LOGGER.debug("Full Assets response structure: %s", data)
@@ -221,10 +309,7 @@ class LocaAPI:
                         error_detail = None
                         
                         # Check for various error message fields
-                        for field in ["message", "error", "description", "detail", "reason"]:
-                            if data.get(field):
-                                error_detail = data.get(field)
-                                break
+                        error_detail = APIResponseHelper.extract_error_message(data)
                         
                         if not error_detail:
                             error_detail = f"API returned status='{status}'. Full response: {data}"
@@ -252,7 +337,7 @@ class LocaAPI:
                 f"{API_BASE_URL}/{API_LOCATIONS_ENDPOINT}",
                 json={"key": self._api_key},
             ) as response:
-                if response.status == 200:
+                if response.status == HTTPStatus.OK:
                     data = await response.json()
                     _LOGGER.debug("Locations response data type: %s", type(data))
                     
@@ -285,11 +370,7 @@ class LocaAPI:
                             return locations
                         
                         # Check for error in dict response
-                        error_detail = None
-                        for field in ["message", "error", "description", "detail", "reason"]:
-                            if data.get(field):
-                                error_detail = data.get(field)
-                                break
+                        error_detail = APIResponseHelper.extract_error_message(data) if isinstance(data, dict) else None
                         
                         if error_detail:
                             _LOGGER.error("Failed to get locations: %s", error_detail)
@@ -320,7 +401,7 @@ class LocaAPI:
                 f"{API_BASE_URL}/{API_STATUS_ENDPOINT}",
                 json={"key": self._api_key},
             ) as response:
-                if response.status == 200:
+                if response.status == HTTPStatus.OK:
                     data = await response.json()
                     _LOGGER.debug("StatusList response data type: %s", type(data))
                     _LOGGER.debug("Full StatusList response structure: %s", data)
@@ -350,11 +431,7 @@ class LocaAPI:
                             return devices
                         
                         # Check for error in dict response
-                        error_detail = None
-                        for field in ["message", "error", "description", "detail", "reason"]:
-                            if data.get(field):
-                                error_detail = data.get(field)
-                                break
+                        error_detail = APIResponseHelper.extract_error_message(data) if isinstance(data, dict) else None
                         
                         if error_detail:
                             _LOGGER.error("Failed to get status list: %s", error_detail)
@@ -385,7 +462,7 @@ class LocaAPI:
                 f"{API_BASE_URL}/{API_GROUPS_ENDPOINT}",
                 json={"key": self._api_key},
             ) as response:
-                if response.status == 200:
+                if response.status == HTTPStatus.OK:
                     data = await response.json()
                     _LOGGER.debug("Groups response data type: %s", type(data))
                     _LOGGER.debug("Full Groups response structure: %s", data)
@@ -402,11 +479,7 @@ class LocaAPI:
                         return data
                     
                     # Check for error in response
-                    error_detail = None
-                    for field in ["message", "error", "description", "detail", "reason"]:
-                        if data.get(field):
-                            error_detail = data.get(field)
-                            break
+                    error_detail = APIResponseHelper.extract_error_message(data)
                     
                     if error_detail:
                         _LOGGER.error("Failed to get groups: %s", error_detail)
@@ -438,82 +511,56 @@ class LocaAPI:
             return ""
         return self._groups_cache.get(int(group_id), "")
 
-    def parse_status_as_device(self, status_entry: dict[str, Any]) -> dict[str, Any]:
-        """Parse status data from StatusList as device data."""
-        # Extract Asset information
+    def _extract_device_basic_info(self, status_entry: dict[str, Any]) -> tuple[dict[str, Any], str, str]:
+        """Extract basic device information from status entry."""
         asset = status_entry.get("Asset", {})
         device_id = str(asset.get("id", ""))
         name = asset.get("label", f"Loca Device {device_id}")
-        
-        # Extract History (actual GPS) data
+        return asset, device_id, name
+
+    def _extract_location_data(self, history: dict[str, Any]) -> tuple[float, float, datetime | None, int | None]:
+        """Extract location and timing data from history."""
+        latitude = APIResponseHelper.safe_float_conversion(history.get("latitude"))
+        longitude = APIResponseHelper.safe_float_conversion(history.get("longitude"))
+        last_seen = APIResponseHelper.parse_timestamp(history.get("time"))
+        battery_level = APIResponseHelper.safe_int_conversion(history.get("charge")) if history.get("charge") is not None else None
+        return latitude, longitude, last_seen, battery_level
+
+    def _extract_quality_metrics(self, history: dict[str, Any]) -> tuple[int, int, int, float]:
+        """Extract GPS and signal quality metrics."""
+        gps_accuracy = APIResponseHelper.safe_int_conversion(history.get("HDOP", 1), 1)
+        satellites = APIResponseHelper.safe_int_conversion(history.get("SATU"))
+        signal_strength = APIResponseHelper.safe_int_conversion(history.get("strength"))
+        speed = APIResponseHelper.safe_float_conversion(history.get("speed"))
+        return gps_accuracy, satellites, signal_strength, speed
+
+    def parse_status_as_device(self, status_entry: dict[str, Any]) -> dict[str, Any]:
+        """Parse status data from StatusList as device data."""
+        # Extract basic device information
+        asset, device_id, name = self._extract_device_basic_info(status_entry)
+
+        # Extract GPS and location data
         history = status_entry.get("History", {})
-        
-        # Extract Spot (processed location) data for address info
         spot = status_entry.get("Spot", {})
-        
-        _LOGGER.debug("Parsing StatusList entry for device %s: Asset=%s, History=%s, Spot=%s", 
+
+        _LOGGER.debug("Parsing StatusList entry for device %s: Asset=%s, History=%s, Spot=%s",
                      device_id, asset, history, spot)
-        
-        # Get GPS coordinates from History (real-time GPS data)
-        latitude = float(history.get("latitude", 0))
-        longitude = float(history.get("longitude", 0))
-        
-        # Parse timestamp from History
-        timestamp = history.get("time", 0)
-        last_seen = None
-        if timestamp:
-            try:
-                from datetime import timezone
-                last_seen = datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
-            except (ValueError, TypeError) as e:
-                _LOGGER.debug("Could not parse timestamp %s: %s", timestamp, e)
-        
-        # Get battery level from History (charge field)
-        battery_level = history.get("charge")
-        if battery_level is not None:
-            battery_level = int(float(battery_level))
-        
-        # Get GPS quality info
-        gps_accuracy = history.get("HDOP", 1)  # HDOP as accuracy indicator
-        satellites = history.get("SATU", 0)  # Number of satellites
-        signal_strength = history.get("strength", 0)  # GSM signal strength
-        speed = history.get("speed", 0.0)  # Current speed
-        
-        # Get origin type (1=GPS, 2=LBS)
+
+        # Extract location and timing data
+        latitude, longitude, last_seen, battery_level = self._extract_location_data(history)
+
+        # Extract quality metrics
+        gps_accuracy, satellites, signal_strength, speed = self._extract_quality_metrics(history)
+
+        # Determine location source
         origin_type = spot.get("origin", 1) if spot else 1
         location_source = "GPS" if origin_type == 1 else "Cell Tower"
-        
-        # Build address from Spot data using Dutch formatting conventions
-        # Dutch format: "Street Number, Zipcode City, Country"
-        address_parts = []
-        if spot:
-            # Street and number (e.g., "Brouwerstraat 30")
-            if spot.get("street") and spot.get("number"):
-                address_parts.append(f"{spot['street']} {spot['number']}")
-            elif spot.get("street"):
-                address_parts.append(spot["street"])
-            
-            # Zipcode and city (e.g., "2984AR Ridderkerk") 
-            zipcode_city = []
-            if spot.get("zipcode"):
-                zipcode_city.append(spot["zipcode"])
-            if spot.get("city"):
-                zipcode_city.append(spot["city"])
-            
-            if zipcode_city:
-                address_parts.append(" ".join(zipcode_city))
-            
-            # Country (e.g., "Netherlands")
-            if spot.get("country"):
-                address_parts.append(spot["country"])
-        
-        address = ", ".join(address_parts) if address_parts else None
-        
-        # Use spot label if available, otherwise asset label
-        if spot and spot.get("label"):
-            location_label = spot["label"]
-        else:
-            location_label = None
+
+        # Build address using helper method
+        address = APIResponseHelper.format_dutch_address(spot) if spot else None
+
+        # Use spot label if available
+        location_label = spot.get("label") if spot else None
         
         return {
             "device_id": device_id,
@@ -563,7 +610,6 @@ class LocaAPI:
         longitude = float(location.get("longitude", 0))
         
         # Parse timestamps
-        insert_time = location.get("insert", "")
         update_time = location.get("update", "")
         
         # Use the most recent timestamp as last_seen

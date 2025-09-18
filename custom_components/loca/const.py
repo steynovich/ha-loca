@@ -20,6 +20,49 @@ API_GROUPS_ENDPOINT: str = "Groups.json"
 # Update intervals
 DEFAULT_SCAN_INTERVAL: int = 60  # seconds
 
+# HTTP Status Codes
+class HTTPStatus:
+    """HTTP status codes used in the integration."""
+    OK = 200
+    FORBIDDEN = 403
+    NOT_FOUND = 404
+    UNAUTHORIZED = 401
+
+# Time Constants
+class TimeConstants:
+    """Time conversion constants."""
+    SECONDS_PER_MINUTE = 60
+    SECONDS_PER_HOUR = 3600
+    SECONDS_PER_DAY = 86400
+    HOURS_PER_DAY = 24
+    MINUTES_PER_HOUR = 60
+
+# API Response Constants
+class APIConstants:
+    """Constants for API responses and error handling."""
+    ERROR_FIELDS = ["message", "error", "description", "detail", "reason"]
+    CONNECTIVITY_TEST_ERRORS = [
+        "cannot connect to host",
+        "name or service not known",
+        "ssl",
+        "certificate",
+        "timeout",
+    ]
+    AUTH_ERROR_TERMS = ["auth", "401", "403", "unauthorized", "forbidden"]
+
+# Location Constants
+class LocationConstants:
+    """Constants for location processing."""
+    GPS_ORIGIN_TYPE = 1
+    CELL_TOWER_ORIGIN_TYPE = 2
+    GPS_SOURCE_NAME = "GPS"
+    CELL_TOWER_SOURCE_NAME = "Cell Tower"
+    DEFAULT_GPS_ACCURACY = 100
+    MIN_LATITUDE = -90
+    MAX_LATITUDE = 90
+    MIN_LONGITUDE = -180
+    MAX_LONGITUDE = 180
+
 # Device attributes
 ATTR_BATTERY_LEVEL: str = "battery_level"
 ATTR_GPS_ACCURACY: str = "gps_accuracy"

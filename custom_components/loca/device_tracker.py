@@ -12,6 +12,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .base import LocaEntityMixin
 from .const import DOMAIN, LOCA_ASSET_TYPE_ICONS
 from .coordinator import LocaDataUpdateCoordinator
 
@@ -36,7 +37,7 @@ async def async_setup_entry(
     # This is a Home Assistant limitation for device tracker entities.
 
 
-class LocaDeviceTracker(CoordinatorEntity, TrackerEntity):
+class LocaDeviceTracker(LocaEntityMixin, CoordinatorEntity, TrackerEntity):
     """Representation of a Loca device tracker."""
 
     _attr_has_entity_name = True
@@ -46,15 +47,11 @@ class LocaDeviceTracker(CoordinatorEntity, TrackerEntity):
         self, coordinator: LocaDataUpdateCoordinator, device_id: str
     ) -> None:
         """Initialize the device tracker."""
-        super().__init__(coordinator)
-        self._device_id = device_id
+        LocaEntityMixin.__init__(self, coordinator, device_id)
+        CoordinatorEntity.__init__(self, coordinator)
         self._attr_unique_id = f"{DOMAIN}_{device_id}"
         self._attr_name = None  # Use device name
 
-    @property
-    def device_data(self) -> dict[str, Any]:
-        """Return device data from coordinator."""
-        return self.coordinator.data.get(self._device_id, {})
 
     @property
     def name(self) -> str | None:
@@ -108,12 +105,3 @@ class LocaDeviceTracker(CoordinatorEntity, TrackerEntity):
         asset_type = asset_info.get("type", 0)
         return LOCA_ASSET_TYPE_ICONS.get(asset_type, "mdi:radar")
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._device_id)},
-            name=self.device_data.get("name", f"Loca Device {self._device_id}"),
-            manufacturer="Loca",
-            model="GPS Tracker",
-        )

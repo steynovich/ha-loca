@@ -24,6 +24,7 @@ from .const import (
     CONF_USERNAME,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    APIConstants,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
         except Exception as err:
             # Check if error is authentication related
             error_str = str(err).lower()
-            if any(term in error_str for term in ["auth", "401", "403", "unauthorized", "forbidden"]):
+            if any(term in error_str for term in APIConstants.AUTH_ERROR_TERMS):
                 if self.config_entry is not None:
                     async_create_api_auth_issue(self.hass, self.config_entry)
                 raise ConfigEntryAuthFailed(f"Authentication error: {err}") from err

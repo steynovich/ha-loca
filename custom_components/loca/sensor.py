@@ -18,7 +18,8 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, LOCA_ASSET_TYPE_ICONS
+from .base import LocaEntityMixin
+from .const import DOMAIN, LOCA_ASSET_TYPE_ICONS, TimeConstants
 from .coordinator import LocaDataUpdateCoordinator
 
 SENSOR_TYPES = {
@@ -94,7 +95,7 @@ async def async_setup_entry(
     # This is a Home Assistant limitation for sensor entities.
 
 
-class LocaSensor(CoordinatorEntity, SensorEntity):
+class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
     """Representation of a Loca sensor."""
 
     _attr_has_entity_name = True
@@ -107,17 +108,13 @@ class LocaSensor(CoordinatorEntity, SensorEntity):
         sensor_type: str,
     ) -> None:
         """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._device_id = device_id
+        LocaEntityMixin.__init__(self, coordinator, device_id)
+        CoordinatorEntity.__init__(self, coordinator)
         self._sensor_type = sensor_type
         self.entity_description = SENSOR_TYPES[sensor_type]
         self._attr_unique_id = f"{DOMAIN}_{device_id}_{sensor_type}"
         # Entity name is handled by entity_description
 
-    @property
-    def device_data(self) -> dict[str, Any]:
-        """Return device data from coordinator."""
-        return self.coordinator.data.get(self._device_id, {})
 
     @property
     def name(self) -> str | None:
@@ -176,111 +173,133 @@ class LocaSensor(CoordinatorEntity, SensorEntity):
         
         return None
 
+    def _get_last_seen_attributes(self) -> dict[str, Any]:
+        """Get attributes for last_seen sensor."""
+        attributes = {}
+        if location_source := self.device_data.get("location_source"):
+            attributes["location_source"] = location_source
+        return attributes
+
+    def _get_asset_info_attributes(self) -> dict[str, Any]:
+        """Get attributes for asset_info sensor."""
+        attributes = {}
+        asset_info = self.device_data.get("asset_info", {})
+        if asset_info:
+            attributes.update({
+                "brand": asset_info.get("brand", "Unknown"),
+                "model": asset_info.get("model", "Unknown"),
+                "serial": asset_info.get("serial", "Unknown"),
+                "type": asset_info.get("type", "Unknown"),
+                "group_name": asset_info.get("group_name", "Unknown"),
+            })
+
+        # Add additional device information
+        for key, attr_name in [
+            ("signal_strength", "gsm_signal_strength"),
+            ("location_label", "location_label"),
+            ("address", "address"),
+        ]:
+            if value := self.device_data.get(key):
+                attributes[attr_name] = value
+        return attributes
+
+    def _get_speed_attributes(self) -> dict[str, Any]:
+        """Get attributes for speed sensor."""
+        attributes = {}
+        if location_source := self.device_data.get("location_source"):
+            attributes["location_source"] = location_source
+        if satellites := self.device_data.get("satellites"):
+            attributes["satellites"] = satellites
+        if gps_accuracy := self.device_data.get("gps_accuracy"):
+            attributes["gps_accuracy"] = f"{gps_accuracy}m"
+        return attributes
+
+    def _format_time_of_day(self, timeofday: int | float) -> str | None:
+        """Format timeofday value to HH:MM format."""
+        try:
+            timeofday = int(timeofday)
+            if timeofday >= 1000:
+                # Extract hours and minutes from HHMM00 format (e.g., 91000 = 9:10)
+                hours = timeofday // 10000 if timeofday >= 10000 else 0
+                minutes = (timeofday % 10000) // 100 if timeofday >= 100 else 0
+            else:
+                # Fallback: treat as seconds since midnight
+                timeofday = abs(timeofday) % TimeConstants.SECONDS_PER_DAY
+                hours = timeofday // TimeConstants.SECONDS_PER_HOUR if timeofday >= TimeConstants.SECONDS_PER_HOUR else 0
+                minutes = (timeofday % TimeConstants.SECONDS_PER_HOUR) // TimeConstants.SECONDS_PER_MINUTE if timeofday >= TimeConstants.SECONDS_PER_MINUTE else 0
+
+            # Ensure valid time range using constants
+            hours = min(TimeConstants.HOURS_PER_DAY - 1, max(0, hours))
+            minutes = min(TimeConstants.MINUTES_PER_HOUR - 1, max(0, minutes))
+            return f"{hours:02d}:{minutes:02d}"
+        except (ValueError, TypeError):
+            return None
+
+    def _get_location_update_attributes(self) -> dict[str, Any]:
+        """Get attributes for location_update sensor."""
+        attributes = {}
+        location_update = self.device_data.get("location_update", {})
+        if not location_update:
+            return attributes
+
+        # Add formatted update time
+        if timeofday := location_update.get("timeofday"):
+            if isinstance(timeofday, (int, float)):
+                if formatted_time := self._format_time_of_day(timeofday):
+                    attributes["update_time"] = formatted_time
+
+        attributes.update({
+            "frequency": location_update.get("frequency", 0),
+            "always_on": location_update.get("always", 0) == 1,
+            "begin_time": location_update.get("begin", 0),
+            "end_time": location_update.get("end", 0),
+        })
+
+        # Convert frequency to human readable format using constants
+        frequency = location_update.get("frequency", 0)
+        if frequency >= TimeConstants.SECONDS_PER_DAY:
+            attributes["frequency_description"] = f"{frequency // TimeConstants.SECONDS_PER_DAY} day(s)"
+        elif frequency >= TimeConstants.SECONDS_PER_HOUR:
+            attributes["frequency_description"] = f"{frequency // TimeConstants.SECONDS_PER_HOUR} hour(s)"
+        elif frequency >= TimeConstants.SECONDS_PER_MINUTE:
+            attributes["frequency_description"] = f"{frequency // TimeConstants.SECONDS_PER_MINUTE} minute(s)"
+        else:
+            attributes["frequency_description"] = f"{frequency} second(s)"
+        return attributes
+
+    def _get_location_attributes(self) -> dict[str, Any]:
+        """Get attributes for location sensor."""
+        attributes = {}
+        address_details = self.device_data.get("address_details", {})
+
+        # Add non-empty address components
+        for key, value in address_details.items():
+            if value:
+                attributes[key] = value
+
+        # Add contextual information
+        for key, attr_name in [
+            ("location_label", "location_label"),
+            ("address", "full_address"),
+            ("satellites", "satellites"),
+        ]:
+            if value := self.device_data.get(key):
+                attributes[attr_name] = value
+        return attributes
+
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return additional state attributes."""
-        attributes = {}
-        
-        if self._sensor_type == "last_seen":
-            if location_source := self.device_data.get("location_source"):
-                attributes["location_source"] = location_source
-        elif self._sensor_type == "asset_info":
-            # Add all asset information as attributes
-            asset_info = self.device_data.get("asset_info", {})
-            if asset_info:
-                attributes.update({
-                    "brand": asset_info.get("brand", "Unknown"),
-                    "model": asset_info.get("model", "Unknown"), 
-                    "serial": asset_info.get("serial", "Unknown"),
-                    "type": asset_info.get("type", "Unknown"),
-                    "group_name": asset_info.get("group_name", "Unknown"),
-                })
-            
-            # Add additional device information as attributes
-            if signal_strength := self.device_data.get("signal_strength"):
-                attributes["gsm_signal_strength"] = signal_strength
-            if location_label := self.device_data.get("location_label"):
-                attributes["location_label"] = location_label
-            if address := self.device_data.get("address"):
-                attributes["address"] = address
-        elif self._sensor_type == "speed":
-            # Add speed-related attributes
-            if location_source := self.device_data.get("location_source"):
-                attributes["location_source"] = location_source
-            if satellites := self.device_data.get("satellites"):
-                attributes["satellites"] = satellites
-            if gps_accuracy := self.device_data.get("gps_accuracy"):
-                attributes["gps_accuracy"] = f"{gps_accuracy}m"
-        elif self._sensor_type == "location_update":
-            # Add detailed location update configuration as attributes
-            location_update = self.device_data.get("location_update", {})
-            if location_update:
-                # Convert timeofday to HH:MM format
-                # Format: timeofday like 91000 means 9:10 (HHMM * 100 + SS format)
-                timeofday = location_update.get("timeofday", 0)
-                if timeofday and isinstance(timeofday, (int, float)):
-                    try:
-                        timeofday = int(timeofday)
-                        # Parse format: HHMM00 or similar (e.g., 91000 = 9:10)
-                        if timeofday >= 1000:
-                            # Extract hours and minutes from HHMM00 format
-                            hours = timeofday // 10000 if timeofday >= 10000 else 0
-                            minutes = (timeofday % 10000) // 100 if timeofday >= 100 else 0
-                            # Ensure valid time range
-                            hours = min(23, max(0, hours))
-                            minutes = min(59, max(0, minutes))
-                            attributes["update_time"] = f"{hours:02d}:{minutes:02d}"
-                        else:
-                            # Fallback: treat as seconds since midnight
-                            timeofday = abs(timeofday) % 86400
-                            hours = timeofday // 3600 if timeofday >= 3600 else 0
-                            minutes = (timeofday % 3600) // 60 if timeofday >= 60 else 0
-                            hours = min(23, max(0, hours))
-                            minutes = min(59, max(0, minutes))
-                            attributes["update_time"] = f"{hours:02d}:{minutes:02d}"
-                    except (ValueError, TypeError):
-                        # If parsing fails, don't add the update_time attribute
-                        pass
-                
-                attributes.update({
-                    "frequency": location_update.get("frequency", 0),
-                    "always_on": location_update.get("always", 0) == 1,
-                    "begin_time": location_update.get("begin", 0),
-                    "end_time": location_update.get("end", 0),
-                })
-                
-                # Convert frequency to human readable format
-                frequency = location_update.get("frequency", 0)
-                if frequency >= 86400:
-                    attributes["frequency_description"] = f"{frequency // 86400} day(s)"
-                elif frequency >= 3600:
-                    attributes["frequency_description"] = f"{frequency // 3600} hour(s)"
-                elif frequency >= 60:
-                    attributes["frequency_description"] = f"{frequency // 60} minute(s)"
-                else:
-                    attributes["frequency_description"] = f"{frequency} second(s)"
-        elif self._sensor_type == "location":
-            # Add detailed address components as attributes (textual data only)
-            address_details = self.device_data.get("address_details", {})
-            if address_details:
-                # Only add non-empty address components
-                for key, value in address_details.items():
-                    if value:
-                        attributes[key] = value
-                
-                # Add textual location context information
-                if location_label := self.device_data.get("location_label"):
-                    attributes["location_label"] = location_label
-                
-                # Add formatted full address for reference
-                if full_address := self.device_data.get("address"):
-                    attributes["full_address"] = full_address
-                
-                # Add GPS satellite information
-                if satellites := self.device_data.get("satellites"):
-                    attributes["satellites"] = satellites
-        
-        return attributes
+        attribute_handlers = {
+            "last_seen": self._get_last_seen_attributes,
+            "asset_info": self._get_asset_info_attributes,
+            "speed": self._get_speed_attributes,
+            "location_update": self._get_location_update_attributes,
+            "location": self._get_location_attributes,
+        }
+
+        handler = attribute_handlers.get(self._sensor_type)
+        return handler() if handler else {}
 
     @property
     def icon(self) -> str | None:
@@ -294,21 +313,12 @@ class LocaSensor(CoordinatorEntity, SensorEntity):
         # For other sensors, use the default icon from entity description
         return self.entity_description.icon
 
-    @property
-    def device_info(self) -> DeviceInfo:
-        """Return device information."""
-        return DeviceInfo(
-            identifiers={(DOMAIN, self._device_id)},
-            name=self.device_data.get("name", f"Loca Device {self._device_id}"),
-            manufacturer="Loca",
-            model="GPS Tracker",
-        )
 
     @property
     def available(self) -> bool:
         """Return if entity is available."""
         return (
-            super().available
+            CoordinatorEntity.available.fget(self)
             and self._device_id in self.coordinator.data
             and self.native_value is not None
         )
