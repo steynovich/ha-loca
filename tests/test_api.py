@@ -4,14 +4,13 @@ from __future__ import annotations
 import asyncio
 from datetime import datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, ANY
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
 import pytest
 from aiohttp import ClientSession, ClientTimeout
 
 from custom_components.loca.api import LocaAPI
-from custom_components.loca.const import API_BASE_URL
 
 
 @pytest.fixture

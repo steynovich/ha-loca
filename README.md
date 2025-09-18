@@ -1,8 +1,12 @@
 # Loca Device Tracker for Home Assistant
 
 [![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/custom-components/hacs)
+[![GitHub release (latest by date)](https://img.shields.io/github/v/release/steynovich/ha-loca?style=for-the-badge)](https://github.com/steynovich/ha-loca/releases)
+[![GitHub issues](https://img.shields.io/github/issues/steynovich/ha-loca?style=for-the-badge)](https://github.com/steynovich/ha-loca/issues)
 
 A Home Assistant integration for tracking Loca GPS devices. This integration provides device tracking and sensor data for your Loca devices.
+
+> **⚠️ Current Status**: v1.1.1-alpha.1 includes critical authentication fixes for v1.1.0 issues. See [Release Notes](RELEASE_NOTES_v1.1.1-alpha.1.md) for details.
 
 ## Features
 
@@ -460,6 +464,48 @@ For HACS compatibility, ensure the GitHub repository has the following topics se
 **Via GitHub CLI:**
 ```bash
 gh repo edit --add-topic home-assistant,hacs,integration,loca,device-tracker,gps-tracking
+```
+
+## Troubleshooting
+
+### Authentication Issues
+
+If you're experiencing authentication problems, especially after upgrading from v1.1.0:
+
+#### Error: "name 'HTTPStatus' is not defined"
+- **Solution**: Update to v1.1.1-alpha.1 or later
+- **Cause**: Import conflict in v1.1.0 that has been fixed
+
+#### Error: "object has no attribute 'last_update_success_time'"
+- **Solution**: Update to v1.1.1-alpha.1 or later
+- **Cause**: Coordinator attribute error in v1.1.0 that has been fixed
+
+#### General Authentication Failures
+1. **Verify Credentials**: Double-check your API key, username, and password
+2. **Check API Status**: Ensure the Loca API is accessible
+3. **Restart Integration**:
+   - Go to Settings → Devices & Services
+   - Find your Loca integration
+   - Click the three dots → Reload
+4. **Check Logs**: Look for detailed error messages in Home Assistant logs
+
+#### Getting Help
+- Check the [GitHub Issues](https://github.com/steynovich/ha-loca/issues) page
+- Review [Release Notes](RELEASE_NOTES_v1.1.1-alpha.1.md) for known issues
+- Enable debug logging for detailed troubleshooting
+
+### Debug Logging
+
+To enable detailed logging for troubleshooting:
+
+```yaml
+# Add to configuration.yaml
+logger:
+  default: info
+  logs:
+    custom_components.loca: debug
+    custom_components.loca.api: debug
+    custom_components.loca.coordinator: debug
 ```
 
 ## License

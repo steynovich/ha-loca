@@ -1,6 +1,6 @@
 """Tests for Loca diagnostics."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from datetime import datetime, timezone
 
 from homeassistant.core import HomeAssistant
@@ -127,7 +127,7 @@ class TestDiagnostics:
         assert diagnostics["name"] == "Test Car"
         assert diagnostics["latitude"] == "**REDACTED**"
         assert diagnostics["longitude"] == "**REDACTED**"
-        assert diagnostics["has_gps_data"] == True
+        assert diagnostics["has_gps_data"]
         assert diagnostics["asset_info"]["brand"] == "BMW"
 
     @pytest.mark.asyncio

@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, MagicMock
 from datetime import datetime
 
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
 
 from custom_components.loca.device_tracker import LocaDeviceTracker, async_setup_entry
 from custom_components.loca.const import DOMAIN

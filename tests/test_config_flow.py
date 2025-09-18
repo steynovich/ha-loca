@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from collections.abc import Generator
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +13,6 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry  # type
 
 from custom_components.loca.config_flow import (
     CannotConnect,
-    ConfigFlow,
     InvalidAuth,
     validate_input,
 )

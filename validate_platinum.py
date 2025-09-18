@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Validation script to check Platinum requirements."""
 
-import ast
 import os
 from pathlib import Path
 

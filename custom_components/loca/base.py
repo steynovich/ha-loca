@@ -20,9 +20,10 @@ class LocaEntityMixin:
     def device_data(self) -> dict[str, Any]:
         """Return device data from coordinator with caching."""
         # Cache device data to avoid repeated dictionary lookups
-        if not hasattr(self, '_cached_device_data') or self.coordinator.last_update_success_time != getattr(self, '_last_cache_time', None):
+        current_data_id = id(self.coordinator.data)
+        if not hasattr(self, '_cached_device_data') or getattr(self, '_last_data_id', None) != current_data_id:
             self._cached_device_data = self.coordinator.data.get(self._device_id, {})
-            self._last_cache_time = self.coordinator.last_update_success_time
+            self._last_data_id = current_data_id
         return self._cached_device_data
 
     @property

@@ -10,9 +10,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import aiohttp_client
 
 from .api import LocaAPI
 from .const import CONF_API_KEY, CONF_PASSWORD, CONF_USERNAME, DOMAIN, DEFAULT_SCAN_INTERVAL

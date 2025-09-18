@@ -1,16 +1,3 @@
-# Release Notes
-
-## Latest Release: v1.1.1-alpha.1 (Current)
-**Critical authentication fixes** - See [v1.1.1-alpha.1 Release Notes](RELEASE_NOTES_v1.1.1-alpha.1.md)
-
-## Previous Releases
-- [v1.0.3](RELEASE_NOTES_v1.0.3.md) - Latest stable release
-- [v1.0.2](RELEASE_NOTES_v1.0.2.md)
-- [v1.0.1](RELEASE_NOTES_v1.0.1.md)
-- [v1.0.0](RELEASE_NOTES_v1.0.0.md) - Initial release
-
----
-
 # Release v1.0.0 - Initial Release
 
 ## 🎉 First Stable Release

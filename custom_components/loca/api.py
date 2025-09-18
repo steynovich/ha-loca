@@ -3,15 +3,11 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime
-from http import HTTPStatus
 from typing import Any
 
-import aiohttp
 from aiohttp import ClientSession, ClientTimeout
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import aiohttp_client
-
-from .error_handling import sanitize_for_logging
 
 from .const import (
     API_ASSETS_ENDPOINT,
@@ -21,7 +17,9 @@ from .const import (
     API_LOCATIONS_ENDPOINT,
     API_STATUS_ENDPOINT,
     API_GROUPS_ENDPOINT,
+    HTTPStatus,
 )
+from .error_handling import sanitize_for_logging
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -1,11 +1,10 @@
 """Tests for Loca coordinator."""
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import patch
 from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.loca.coordinator import LocaDataUpdateCoordinator
 from custom_components.loca.const import DOMAIN, DEFAULT_SCAN_INTERVAL

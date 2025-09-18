@@ -36,7 +36,7 @@ def handle_config_flow_errors(func: Callable[..., T]) -> Callable[..., T]:
                 errors["base"] = "cannot_connect"
             except self.__class__.InvalidAuth:
                 errors["base"] = "invalid_auth"
-            except Exception as err:
+            except Exception:
                 _LOGGER.exception("Unexpected exception in config flow")
                 errors["base"] = "unknown"
 
@@ -70,6 +70,6 @@ class ConfigFlowErrorMixin:
             return {"base": "cannot_connect"}
         except self.InvalidAuth:
             return {"base": "invalid_auth"}
-        except Exception as err:
+        except Exception:
             _LOGGER.exception("Unexpected validation error")
             return {"base": "unknown"}

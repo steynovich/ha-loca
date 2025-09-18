@@ -2,7 +2,6 @@
 """Validation script to check HACS compliance requirements."""
 
 import json
-import os
 from pathlib import Path
 
 

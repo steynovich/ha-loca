@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Validation script to check comprehensive test coverage."""
 
-import os
 from pathlib import Path
 
 

@@ -1,9 +1,8 @@
 """Tests for Loca integration initialization."""
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from homeassistant.core import HomeAssistant
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 
 from custom_components.loca import async_setup_entry, async_unload_entry

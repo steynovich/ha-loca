@@ -6,7 +6,6 @@ from datetime import datetime
 from homeassistant.core import HomeAssistant
 from homeassistant.components.sensor import SensorDeviceClass, SensorStateClass
 from homeassistant.const import PERCENTAGE
-from homeassistant.helpers.device_registry import DeviceInfo
 
 from custom_components.loca.sensor import LocaSensor, async_setup_entry, SENSOR_TYPES
 from custom_components.loca.const import DOMAIN

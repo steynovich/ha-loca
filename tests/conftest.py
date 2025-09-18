@@ -1,14 +1,11 @@
 """Common fixtures for Loca tests."""
 from __future__ import annotations
 
-import asyncio
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.core import HomeAssistant
 
 from custom_components.loca.const import CONF_API_KEY, DOMAIN
 

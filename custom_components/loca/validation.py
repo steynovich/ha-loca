@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from .const import LocationConstants
-from .types import DeviceData, LocationEntry, StatusEntry
+from .types import LocationEntry, StatusEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,7 +54,7 @@ class DataValidator:
 
         try:
             level = int(float(battery_level))
-        except (ValueError, TypeError) as err:
+        except (ValueError, TypeError):
             _LOGGER.warning("Invalid battery level value: %s", battery_level)
             return None
 

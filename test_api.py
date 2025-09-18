@@ -26,14 +26,14 @@ async def test_api_directly():
         print("ERROR: All credentials are required!")
         return
     
-    print(f"\nTesting with:")
+    print("\nTesting with:")
     print(f"- API Key: {'*' * (len(api_key) - 4)}{api_key[-4:] if len(api_key) > 4 else '***'}")
     print(f"- Username: {username}")
     print(f"- Password: {'*' * len(password)}")
     print(f"- Endpoint: {API_BASE_URL}/{API_LOGIN_ENDPOINT}")
     
     # Test 1: Direct HTTP request
-    print(f"\n=== Test 1: Direct HTTP Request ===")
+    print("\n=== Test 1: Direct HTTP Request ===")
     async with aiohttp.ClientSession() as session:
         login_data = {
             "key": api_key,
@@ -61,7 +61,7 @@ async def test_api_directly():
                             print(f"Parsed JSON: {json.dumps(data, indent=2)}")
                             
                             # Analyze the response structure
-                            print(f"\nResponse Analysis:")
+                            print("\nResponse Analysis:")
                             print(f"- Has 'status' field: {'status' in data}")
                             print(f"- Status value: {data.get('status', 'N/A')}")
                             print(f"- Has 'user' field: {'user' in data}")
@@ -71,12 +71,12 @@ async def test_api_directly():
                             
                             # Check if it's a successful login (has user object)
                             if data.get("user"):
-                                print(f"✅ SUCCESS: Login appears successful")
+                                print("✅ SUCCESS: Login appears successful")
                                 user = data["user"]
                                 print(f"- Username: {user.get('username')}")
                                 print(f"- User ID: {user.get('userid')}")
                             else:
-                                print(f"❌ FAILED: No user object in response")
+                                print("❌ FAILED: No user object in response")
                             
                         except json.JSONDecodeError as e:
                             print(f"JSON Parse Error: {e}")
@@ -90,7 +90,7 @@ async def test_api_directly():
             print(f"Request failed: {e}")
     
     # Test 2: Using our LocaAPI class
-    print(f"\n=== Test 2: Using LocaAPI Class ===")
+    print("\n=== Test 2: Using LocaAPI Class ===")
     api = LocaAPI(api_key, username, password)
     try:
         success = await api.authenticate()
@@ -145,7 +145,7 @@ async def test_api_directly():
                 print(f"🏷️  Device Name: {parsed_device['name']}")
                 print(f"🆔 Device ID: {parsed_device['device_id']}")
                 
-                print(f"\n--- SENSOR DATA PREVIEW ---")
+                print("\n--- SENSOR DATA PREVIEW ---")
                 
                 # Battery Sensor
                 battery = parsed_device['battery_level']
@@ -164,7 +164,7 @@ async def test_api_directly():
                     components = [f"{k}: {v}" for k, v in address_details.items() if v]
                     if components:
                         print(f"   └─ Text components: {', '.join(components[:3])}{'...' if len(components) > 3 else ''}")
-                    print(f"   └─ Format: Street Number, Zipcode City, Country")
+                    print("   └─ Format: Street Number, Zipcode City, Country")
                 
                 # Asset Info Sensor
                 asset_info = parsed_device['asset_info']
@@ -204,7 +204,7 @@ async def test_api_directly():
                     else:
                         print(f"   └─ Attributes: Frequency: {frequency}s")
                 else:
-                    print(f"🔄 Location Update Sensor: Not configured")
+                    print("🔄 Location Update Sensor: Not configured")
                 
                 # Last Seen Sensor
                 last_seen = parsed_device.get('last_seen')
@@ -212,7 +212,7 @@ async def test_api_directly():
                     print(f"🕐 Last Seen Sensor: {last_seen.isoformat()}")
                     print(f"   └─ Source: {parsed_device.get('location_source', 'Unknown')}")
                 else:
-                    print(f"🕐 Last Seen Sensor: No timestamp available")
+                    print("🕐 Last Seen Sensor: No timestamp available")
                 
                 # Location Accuracy Sensor (diagnostic, disabled by default)
                 print(f"📊 Location Accuracy Sensor: {parsed_device['gps_accuracy']}m (diagnostic, disabled by default)")

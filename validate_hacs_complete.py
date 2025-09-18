@@ -2,7 +2,6 @@
 """Complete HACS compliance validation against all requirements."""
 
 import json
-import os
 from pathlib import Path
 
 
