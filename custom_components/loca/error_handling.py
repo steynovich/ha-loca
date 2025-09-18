@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import logging
 from functools import wraps
-from typing import Any, Callable, TypeVar, Union
+from typing import Any, Awaitable, Callable, TypeVar, Union
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ T = TypeVar('T')
 
 def handle_api_errors(default_return: Any = None, log_prefix: str = "API operation"):
     """Decorator for consistent API error handling."""
-    def decorator(func: Callable[..., T]) -> Callable[..., Union[T, Any]]:
+    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[Union[T, Any]]]:
         @wraps(func)
         async def wrapper(*args, **kwargs) -> Union[T, Any]:
             try:

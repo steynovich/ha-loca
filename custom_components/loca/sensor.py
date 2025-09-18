@@ -237,7 +237,7 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
 
     def _get_location_update_attributes(self) -> dict[str, Any]:
         """Get attributes for location_update sensor."""
-        attributes = {}
+        attributes: dict[str, Any] = {}
         location_update = self.device_data.get("location_update", {})
         if not location_update:
             return attributes
@@ -318,7 +318,7 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         return (
-            CoordinatorEntity.available.fget(self)
+            super().available
             and self._device_id in self.coordinator.data
             and self.native_value is not None
         )
