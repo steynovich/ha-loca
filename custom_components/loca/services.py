@@ -61,12 +61,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
 
     async def async_force_update(call: ServiceCall) -> None:
         """Force update a specific device."""
+        device_id: str | None = None
         try:
             device_id = call.data["device_id"]
-            
+
             if not device_id:
                 raise ServiceValidationError("Device ID is required")
-            
+
             # Find the coordinator containing this device
             for config_entry in hass.config_entries.async_entries(DOMAIN):
                 coordinator = config_entry.runtime_data
@@ -74,10 +75,10 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     await coordinator.async_request_refresh()
                     _LOGGER.info("Forced update for device: %s", device_id)
                     return
-            
+
             # Device not found in any coordinator
             raise ServiceValidationError(f"Device '{device_id}' not found in any Loca config entry")
-            
+
         except Exception as err:
             _LOGGER.error("Failed to force update device %s: %s", device_id, err)
             raise HomeAssistantError(f"Failed to force update device: {err}") from err

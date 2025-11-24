@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.2] - 2025-11-24
+
+### Bug Fixes
+
+#### Sensor Availability Logic (Medium Severity)
+- **Fixed**: Sensors incorrectly showing as "unavailable" when their value was `None`
+  - Battery, speed, last seen, and location accuracy sensors now correctly show as available even when their values are legitimately `None`
+  - Previously, sensors would appear unavailable in Home Assistant UI even though the device was present
+  - This caused false "unknown" states and broke automations depending on sensor availability
+
+#### Service Exception Handling (Low Severity)
+- **Fixed**: Potential `UnboundLocalError` in force update service
+  - Added proper variable initialization before try block in `async_force_update` service
+  - Prevents secondary exceptions when logging errors if the initial `device_id` extraction fails
+
+#### API Session Race Condition (Medium Severity)
+- **Fixed**: Race condition in HTTP session creation
+  - Added `asyncio.Lock()` with double-checked locking pattern to `_get_session()` method
+  - Prevents multiple session instances from being created when called concurrently
+  - Eliminates potential resource leaks and connection pool exhaustion
+
+### Technical Details
+- Modified Files:
+  - `custom_components/loca/sensor.py` - Fixed availability property logic
+  - `custom_components/loca/services.py` - Added variable pre-initialization
+  - `custom_components/loca/api.py` - Added session lock for thread safety
+- All 152 tests pass
+- Full mypy type checking compliance
+
+---
+
 ## [1.1.1-alpha.1] - 2025-09-18
 
 ### 🚨 Critical Bug Fixes

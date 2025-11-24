@@ -316,8 +316,4 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
     @property
     def available(self) -> bool:
         """Return if entity is available."""
-        return (
-            super().available
-            and self._device_id in self.coordinator.data
-            and self.native_value is not None
-        )
+        return super().available and self._device_id in self.coordinator.data

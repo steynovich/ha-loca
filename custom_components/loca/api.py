@@ -1,6 +1,7 @@
 """API client for Loca devices."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -99,10 +100,10 @@ class LocaAPI:
     """Class to communicate with the Loca API."""
 
     def __init__(
-        self, 
-        api_key: str, 
-        username: str, 
-        password: str, 
+        self,
+        api_key: str,
+        username: str,
+        password: str,
         hass: HomeAssistant | None = None,
         session: ClientSession | None = None
     ) -> None:
@@ -112,6 +113,7 @@ class LocaAPI:
         self._password = password
         self._hass = hass
         self._session: ClientSession | None = session
+        self._session_lock = asyncio.Lock()
         self._authenticated = False
         self._groups_cache: dict[int, str] = {}
     
@@ -122,19 +124,24 @@ class LocaAPI:
 
     async def _get_session(self) -> ClientSession:
         """Get or create aiohttp session."""
-        if self._session is None:
-            if self._hass:
-                # Use Home Assistant's shared session when available
-                self._session = aiohttp_client.async_get_clientsession(self._hass)
-            else:
-                # Fallback for testing or standalone use
-                # Note: Caller is responsible for closing this session
-                timeout = ClientTimeout(total=30)
-                self._session = ClientSession(
-                    timeout=timeout,
-                    headers={"Content-Type": "application/json"},
-                )
-        return self._session
+        if self._session is not None:
+            return self._session
+
+        async with self._session_lock:
+            # Double-check after acquiring lock
+            if self._session is None:
+                if self._hass:
+                    # Use Home Assistant's shared session when available
+                    self._session = aiohttp_client.async_get_clientsession(self._hass)
+                else:
+                    # Fallback for testing or standalone use
+                    # Note: Caller is responsible for closing this session
+                    timeout = ClientTimeout(total=30)
+                    self._session = ClientSession(
+                        timeout=timeout,
+                        headers={"Content-Type": "application/json"},
+                    )
+            return self._session
 
     def _validate_credentials(self) -> bool:
         """Validate that all required credentials are provided."""
