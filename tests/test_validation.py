@@ -27,7 +27,7 @@ class TestValidateCoordinates:
 
     def test_string_coordinates(self) -> None:
         """Test validation of string coordinates."""
-        lat, lon = DataValidator.validate_coordinates("52.3676", "4.9041")
+        lat, lon = DataValidator.validate_coordinates("52.3676", "4.9041")  # type: ignore[arg-type]
         assert lat == 52.3676
         assert lon == 4.9041
 
@@ -83,13 +83,13 @@ class TestValidateCoordinates:
     def test_invalid_coordinate_type(self) -> None:
         """Test rejection of non-numeric coordinate."""
         with pytest.raises(ValidationError) as exc_info:
-            DataValidator.validate_coordinates("invalid", 0)
+            DataValidator.validate_coordinates("invalid", 0)  # type: ignore[arg-type]
         assert "Invalid coordinate values" in str(exc_info.value)
 
     def test_none_coordinates(self) -> None:
         """Test rejection of None coordinates."""
         with pytest.raises(ValidationError):
-            DataValidator.validate_coordinates(None, None)
+            DataValidator.validate_coordinates(None, None)  # type: ignore[arg-type]
 
 
 class TestSafeValidateCoordinates:
@@ -256,7 +256,7 @@ class TestValidateStatusEntry:
     def test_status_entry_not_dict(self) -> None:
         """Test rejection of non-dict status entry."""
         with pytest.raises(ValidationError) as exc_info:
-            DataValidator.validate_status_entry("not a dict")
+            DataValidator.validate_status_entry("not a dict")  # type: ignore[arg-type]
         assert "must be a dictionary" in str(exc_info.value)
 
     def test_status_entry_missing_asset(self) -> None:
@@ -317,7 +317,7 @@ class TestValidateLocationEntry:
     def test_location_entry_not_dict(self) -> None:
         """Test rejection of non-dict location entry."""
         with pytest.raises(ValidationError) as exc_info:
-            DataValidator.validate_location_entry("not a dict")
+            DataValidator.validate_location_entry("not a dict")  # type: ignore[arg-type]
         assert "must be a dictionary" in str(exc_info.value)
 
     def test_location_entry_negative_radius(self) -> None:

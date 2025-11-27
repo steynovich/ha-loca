@@ -38,7 +38,7 @@ async def async_setup_services(hass: HomeAssistant) -> None:
     async def async_refresh_devices(call: ServiceCall) -> None:
         """Refresh devices from Loca API."""
         try:
-            config_entry_ids = await async_extract_config_entry_ids(hass, call)
+            config_entry_ids = await async_extract_config_entry_ids(call)
 
             if not config_entry_ids:
                 raise ServiceValidationError("No Loca config entries found")
