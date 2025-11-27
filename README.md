@@ -6,7 +6,7 @@
 
 A Home Assistant integration for tracking Loca GPS devices. This integration provides device tracking and sensor data for your Loca devices.
 
-> **Current Status**: v1.1.3 includes improved error handling for API connectivity issues. The integration now gracefully handles DNS timeouts and network errors without flooding logs with stack traces.
+> **Current Status**: v1.1.4 includes improved error handling for API connectivity issues. The integration gracefully handles DNS timeouts and network errors without flooding logs with stack traces.
 
 ## Features
 
