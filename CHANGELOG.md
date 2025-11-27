@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.3] - 2025-11-27
+
+### Improved Error Handling
+
+This release significantly improves how the integration handles API connectivity issues, reducing log noise and improving reliability.
+
+#### API Connectivity Improvements
+- **New**: Graceful handling of DNS timeouts, connection refused, and network errors
+  - No more stack traces in logs for temporary connectivity issues
+  - Clean warning messages: "Get assets failed: Cannot connect to Loca API (network/DNS issue). Will retry on next update cycle."
+  - Automatic retry on next update cycle
+- **New**: Added 30-second timeout protection on all API calls
+  - Prevents indefinite hangs when API is unresponsive
+  - Proper `TimeoutError` handling with user-friendly messages
+- **New**: `LocaAPIUnavailableError` exception for clear API unavailability signaling
+
+#### Code Quality Improvements
+- **Fixed**: Race condition in service registration using proper service existence check
+- **Fixed**: Cache invalidation in entity mixin now uses `last_update_success_time` instead of `id()` (which can be reused by Python GC)
+- **Fixed**: Sensitive data no longer logged in API error responses
+- **Improved**: Service error handling now distinguishes between connectivity, update, and validation errors
+- **Improved**: Consolidated timestamp parsing to handle both Unix timestamps and ISO format strings
+- **Improved**: Added coordinate validation using `DataValidator` in all parsing methods
+- **Improved**: Added public API properties (`has_credentials`, `groups_cache_size`) for diagnostics
+- **Removed**: Unused `parallel_updates` semaphore declarations from sensor and device tracker
+
+#### New Test Coverage
+- Added comprehensive tests for error handling module (`test_error_handling.py`)
+- Added validation edge case tests (`test_validation.py`)
+- Added API connectivity error tests (DNS, timeout, connection refused)
+- Added HTTP status code tests (403, 404, 429, 503)
+- Added coordinator error handling tests
+- Added service-specific error tests
+- Added timestamp parsing tests for multiple formats
+
+### Technical Details
+- Modified Files:
+  - `custom_components/loca/api.py` - Timeout protection, connectivity error handling, consolidated timestamp parsing
+  - `custom_components/loca/coordinator.py` - LocaAPIUnavailableError handling
+  - `custom_components/loca/error_handling.py` - New connectivity error utilities
+  - `custom_components/loca/services.py` - Improved exception handling
+  - `custom_components/loca/__init__.py` - Fixed service registration race condition
+  - `custom_components/loca/base.py` - Fixed cache invalidation
+  - `custom_components/loca/const.py` - Added API_TIMEOUT constant
+  - `custom_components/loca/diagnostics.py` - Uses public API properties
+  - `custom_components/loca/sensor.py` - Removed unused imports
+  - `custom_components/loca/device_tracker.py` - Removed unused imports
+- New Test Files:
+  - `tests/test_error_handling.py` - Error handling utilities
+  - `tests/test_validation.py` - Data validation edge cases
+- All tests pass with ruff and mypy compliance
+
+---
+
 ## [1.1.2] - 2025-11-24
 
 ### Bug Fixes

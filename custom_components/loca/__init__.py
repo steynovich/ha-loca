@@ -23,9 +23,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     
-    # Set up services on first integration setup (thread-safe check)
-    # Only set up services if this is the first config entry
-    if len(hass.config_entries.async_entries(DOMAIN)) == 1:
+    # Set up services if not already registered (thread-safe check)
+    if not hass.services.has_service(DOMAIN, "refresh_devices"):
         await async_setup_services(hass)
     
     return True
@@ -38,8 +37,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if coordinator:
             await coordinator.async_shutdown()
         
-        # Unload services if this is the last config entry
-        if len(hass.config_entries.async_entries(DOMAIN)) == 1:
+        # Unload services if this is the last config entry being unloaded
+        remaining_entries = [
+            entry for entry in hass.config_entries.async_entries(DOMAIN)
+            if entry.state.value == "loaded"
+        ]
+        if len(remaining_entries) <= 1:
             await async_unload_services(hass)
     
     return unload_ok

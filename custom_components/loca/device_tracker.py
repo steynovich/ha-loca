@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import logging
-import asyncio
 from typing import Any
 
 from homeassistant.components.device_tracker import TrackerEntity
@@ -40,7 +39,6 @@ class LocaDeviceTracker(LocaEntityMixin, CoordinatorEntity, TrackerEntity):
     """Representation of a Loca device tracker."""
 
     _attr_has_entity_name = True
-    parallel_updates = asyncio.Semaphore(1)
 
     def __init__(
         self, coordinator: LocaDataUpdateCoordinator, device_id: str

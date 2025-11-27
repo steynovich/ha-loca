@@ -20,10 +20,15 @@ class LocaEntityMixin:
     def device_data(self) -> dict[str, Any]:
         """Return device data from coordinator with caching."""
         # Cache device data to avoid repeated dictionary lookups
-        current_data_id = id(self.coordinator.data)
-        if not hasattr(self, '_cached_device_data') or getattr(self, '_last_data_id', None) != current_data_id:
+        # Use last_update_success_time for reliable cache invalidation
+        # (id() can be reused by Python GC for different objects)
+        current_update_time = self.coordinator.last_update_success_time
+        if (
+            not hasattr(self, '_cached_device_data')
+            or getattr(self, '_last_update_time', None) != current_update_time
+        ):
             self._cached_device_data = self.coordinator.data.get(self._device_id, {})
-            self._last_data_id = current_data_id
+            self._last_update_time = current_update_time
         return self._cached_device_data
 
     @property

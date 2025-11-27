@@ -5,9 +5,11 @@ from datetime import datetime, timedelta
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from custom_components.loca.coordinator import LocaDataUpdateCoordinator
 from custom_components.loca.const import DOMAIN, DEFAULT_SCAN_INTERVAL
+from custom_components.loca.error_handling import LocaAPIUnavailableError
 
 
 class TestLocaDataUpdateCoordinator:
@@ -135,7 +137,174 @@ class TestLocaDataUpdateCoordinator:
     async def test_update_data_with_groups_cache(self, hass: HomeAssistant, mock_config_entry):
         """Test data update includes groups cache update."""
         coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
-        
+
         with patch.object(coordinator.api, "authenticate", return_value=False):
             with pytest.raises(ConfigEntryAuthFailed, match="Authentication failed"):
+                await coordinator._async_update_data()
+
+
+class TestCoordinatorErrorHandling:
+    """Test coordinator error handling."""
+
+    @pytest.mark.asyncio
+    async def test_api_unavailable_raises_update_failed(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that LocaAPIUnavailableError raises UpdateFailed."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(coordinator.api, "update_groups_cache", return_value=None), \
+             patch.object(
+                 coordinator.api,
+                 "get_status_list",
+                 side_effect=LocaAPIUnavailableError("API temporarily unavailable")
+             ):
+            with pytest.raises(UpdateFailed) as exc_info:
+                await coordinator._async_update_data()
+
+            assert "temporarily unavailable" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_authentication_error_raises_config_entry_auth_failed(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that authentication errors raise ConfigEntryAuthFailed."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        with patch.object(coordinator.api, "authenticate", return_value=False):
+            with pytest.raises(ConfigEntryAuthFailed):
+                await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_generic_exception_raises_update_failed(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that generic exceptions raise UpdateFailed."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(coordinator.api, "update_groups_cache", return_value=None), \
+             patch.object(
+                 coordinator.api,
+                 "get_status_list",
+                 side_effect=ValueError("Unexpected error")
+             ):
+            with pytest.raises(UpdateFailed) as exc_info:
+                await coordinator._async_update_data()
+
+            assert "Error communicating with API" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_auth_keyword_in_error_raises_config_entry_auth_failed(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that errors containing auth keywords raise ConfigEntryAuthFailed."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(coordinator.api, "update_groups_cache", return_value=None), \
+             patch.object(
+                 coordinator.api,
+                 "get_status_list",
+                 side_effect=Exception("Unauthorized access denied")
+             ):
+            with pytest.raises(ConfigEntryAuthFailed) as exc_info:
+                await coordinator._async_update_data()
+
+            assert "Authentication error" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_403_forbidden_error_raises_config_entry_auth_failed(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that 403 forbidden errors raise ConfigEntryAuthFailed."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(coordinator.api, "update_groups_cache", return_value=None), \
+             patch.object(
+                 coordinator.api,
+                 "get_status_list",
+                 side_effect=Exception("HTTP 403 Forbidden")
+             ):
+            with pytest.raises(ConfigEntryAuthFailed):
+                await coordinator._async_update_data()
+
+    @pytest.mark.asyncio
+    async def test_successful_update_after_api_unavailable(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test successful update after API was unavailable."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        mock_device = {
+            "device_id": "12345",
+            "name": "Test Device",
+            "latitude": 52.0,
+            "longitude": 4.0,
+            "battery_level": 85,
+            "gps_accuracy": 10,
+            "location_source": "GPS",
+            "last_seen": datetime.now(),
+            "address": "Test Street 1",
+        }
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(coordinator.api, "update_groups_cache", return_value=None), \
+             patch.object(coordinator.api, "get_status_list", return_value=[{"Asset": {"id": "12345"}}]), \
+             patch.object(coordinator.api, "parse_status_as_device", return_value=mock_device):
+
+            result = await coordinator._async_update_data()
+
+            assert len(result) == 1
+            assert "12345" in result
+            assert result["12345"]["name"] == "Test Device"
+
+    @pytest.mark.asyncio
+    async def test_empty_status_list(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test handling of empty status list."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(coordinator.api, "update_groups_cache", return_value=None), \
+             patch.object(coordinator.api, "get_status_list", return_value=[]):
+
+            result = await coordinator._async_update_data()
+
+            # Empty result should be returned
+            assert result == {}
+
+    @pytest.mark.asyncio
+    async def test_groups_cache_update_failure_continues(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that groups cache update failure doesn't stop data update."""
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        mock_device = {
+            "device_id": "12345",
+            "name": "Test Device",
+            "latitude": 52.0,
+            "longitude": 4.0,
+            "battery_level": 85,
+            "gps_accuracy": 10,
+            "location_source": "GPS",
+            "last_seen": datetime.now(),
+            "address": "Test Street 1",
+        }
+
+        with patch.object(coordinator.api, "_authenticated", True), \
+             patch.object(
+                 coordinator.api,
+                 "update_groups_cache",
+                 side_effect=Exception("Groups API error")
+             ), \
+             patch.object(coordinator.api, "get_status_list", return_value=[{"Asset": {"id": "12345"}}]), \
+             patch.object(coordinator.api, "parse_status_as_device", return_value=mock_device):
+
+            # Should not raise - groups cache error is non-fatal
+            with pytest.raises(UpdateFailed):
                 await coordinator._async_update_data()

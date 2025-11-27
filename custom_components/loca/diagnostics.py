@@ -43,15 +43,18 @@ async def async_get_config_entry_diagnostics(
             "device_count": len(coordinator.data) if coordinator.data else 0,
         },
         "api_info": {
-            "authenticated": coordinator.api._authenticated,
+            "authenticated": coordinator.api.is_authenticated,
             "base_url": "https://api.loca.nl/v1",  # Static, non-sensitive URL
             "endpoints_used": [
                 "Login.json",
-                "Logout.json", 
+                "Logout.json",
                 "Assets.json",
+                "StatusList.json",
+                "Groups.json",
             ],
             # Don't expose actual API credentials - only indicate if they're configured
-            "credentials_configured": bool(coordinator.api._api_key and coordinator.api._username),
+            "credentials_configured": coordinator.api.has_credentials,
+            "groups_cache_size": coordinator.api.groups_cache_size,
         },
     }
     

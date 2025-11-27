@@ -632,19 +632,19 @@ class TestErrorHandling:
 
 class TestConcurrency:
     """Test concurrent API operations."""
-    
+
     @pytest.mark.asyncio
     async def test_concurrent_requests(self, api: LocaAPI) -> None:
         """Test handling multiple concurrent requests."""
         api._authenticated = True
         mock_session = AsyncMock(spec=ClientSession)
-        
+
         mock_resp = MagicMock()
         mock_resp.status = 200
         mock_resp.json = AsyncMock(return_value={"status": "ok", "assets": []})
-        
+
         mock_session.post.return_value.__aenter__.return_value = mock_resp
-        
+
         with patch.object(api, "_get_session", return_value=mock_session):
             # Make multiple concurrent requests
             results = await asyncio.gather(
@@ -652,6 +652,272 @@ class TestConcurrency:
                 api.get_assets(),
                 api.get_assets()
             )
-            
+
             assert all(isinstance(r, list) for r in results)
             assert len(results) == 3
+
+
+class TestConnectivityErrors:
+    """Test handling of connectivity errors that raise LocaAPIUnavailableError."""
+
+    @pytest.mark.asyncio
+    async def test_dns_error_raises_unavailable(self, api: LocaAPI) -> None:
+        """Test that DNS errors raise LocaAPIUnavailableError."""
+        from aiohttp import ClientConnectorDNSError
+        from custom_components.loca.error_handling import LocaAPIUnavailableError
+
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_key = MagicMock()
+        mock_session.post.side_effect = ClientConnectorDNSError(
+            mock_key, OSError("Timeout while contacting DNS servers")
+        )
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            with pytest.raises(LocaAPIUnavailableError) as exc_info:
+                await api.get_assets()
+
+            assert "Cannot connect to Loca API" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_connection_refused_raises_unavailable(self, api: LocaAPI) -> None:
+        """Test that connection refused errors raise LocaAPIUnavailableError."""
+        from aiohttp import ClientConnectorError
+        from custom_components.loca.error_handling import LocaAPIUnavailableError
+
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_key = MagicMock()
+        mock_session.post.side_effect = ClientConnectorError(
+            mock_key, OSError("Connection refused")
+        )
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            with pytest.raises(LocaAPIUnavailableError):
+                await api.get_assets()
+
+    @pytest.mark.asyncio
+    async def test_timeout_error_raises_unavailable(self, api: LocaAPI) -> None:
+        """Test that timeout errors raise LocaAPIUnavailableError."""
+        from custom_components.loca.error_handling import LocaAPIUnavailableError
+
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = TimeoutError("Request timed out")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            with pytest.raises(LocaAPIUnavailableError) as exc_info:
+                await api.get_assets()
+
+            assert "timed out" in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_status_list_connectivity_error(self, api: LocaAPI) -> None:
+        """Test connectivity error handling in get_status_list."""
+        from custom_components.loca.error_handling import LocaAPIUnavailableError
+
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = ConnectionError("Network unreachable")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            with pytest.raises(LocaAPIUnavailableError):
+                await api.get_status_list()
+
+    @pytest.mark.asyncio
+    async def test_groups_connectivity_error(self, api: LocaAPI) -> None:
+        """Test connectivity error handling in get_groups."""
+        from custom_components.loca.error_handling import LocaAPIUnavailableError
+
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = OSError("No route to host")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            with pytest.raises(LocaAPIUnavailableError):
+                await api.get_groups()
+
+    @pytest.mark.asyncio
+    async def test_authentication_connectivity_error(self, api: LocaAPI) -> None:
+        """Test connectivity error handling in authenticate."""
+        from custom_components.loca.error_handling import LocaAPIUnavailableError
+
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.get.side_effect = TimeoutError("Connection timed out")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            with pytest.raises(LocaAPIUnavailableError):
+                await api.authenticate()
+
+
+class TestHTTPStatusCodes:
+    """Test handling of various HTTP status codes."""
+
+    @pytest.mark.asyncio
+    async def test_http_403_forbidden(self, api: LocaAPI) -> None:
+        """Test handling of HTTP 403 Forbidden."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 403
+        mock_resp.text = AsyncMock(return_value="Forbidden")
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_assets()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_http_404_not_found(self, api: LocaAPI) -> None:
+        """Test handling of HTTP 404 Not Found."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 404
+        mock_resp.text = AsyncMock(return_value="Not Found")
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_assets()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_http_429_rate_limit(self, api: LocaAPI) -> None:
+        """Test handling of HTTP 429 Too Many Requests."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 429
+        mock_resp.text = AsyncMock(return_value="Rate limit exceeded")
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_assets()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_http_503_service_unavailable(self, api: LocaAPI) -> None:
+        """Test handling of HTTP 503 Service Unavailable."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 503
+        mock_resp.text = AsyncMock(return_value="Service Unavailable")
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_assets()
+            assert result == []
+
+
+class TestAPIProperties:
+    """Test API public properties."""
+
+    def test_is_authenticated_property(self, api: LocaAPI) -> None:
+        """Test is_authenticated property."""
+        assert api.is_authenticated is False
+        api._authenticated = True
+        assert api.is_authenticated is True
+
+    def test_has_credentials_property(self, api: LocaAPI) -> None:
+        """Test has_credentials property."""
+        assert api.has_credentials is True  # All credentials set in fixture
+
+        # Test with missing api_key
+        api_no_key = LocaAPI("", "user", "pass")
+        assert api_no_key.has_credentials is False
+
+        # Test with missing username
+        api_no_user = LocaAPI("key", "", "pass")
+        assert api_no_user.has_credentials is False
+
+    def test_groups_cache_size_property(self, api: LocaAPI) -> None:
+        """Test groups_cache_size property."""
+        assert api.groups_cache_size == 0
+
+        api._groups_cache = {1: "Group 1", 2: "Group 2", 3: "Group 3"}
+        assert api.groups_cache_size == 3
+
+
+class TestTimestampParsing:
+    """Test timestamp parsing in APIResponseHelper."""
+
+    def test_parse_unix_timestamp(self) -> None:
+        """Test parsing Unix timestamp (integer)."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp(1640995200)
+        assert result is not None
+        assert result.year == 2022
+        assert result.month == 1
+        assert result.day == 1
+
+    def test_parse_unix_timestamp_float(self) -> None:
+        """Test parsing Unix timestamp (float)."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp(1640995200.5)
+        assert result is not None
+        assert result.year == 2022
+
+    def test_parse_iso_timestamp_with_z(self) -> None:
+        """Test parsing ISO timestamp with Z timezone."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp("2022-01-01T12:00:00Z")
+        assert result is not None
+        assert result.year == 2022
+        assert result.hour == 12
+
+    def test_parse_iso_timestamp_with_offset(self) -> None:
+        """Test parsing ISO timestamp with timezone offset."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp("2022-01-01T12:00:00+01:00")
+        assert result is not None
+        assert result.year == 2022
+
+    def test_parse_iso_timestamp_no_timezone(self) -> None:
+        """Test parsing ISO timestamp without timezone."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp("2022-01-01T12:00:00")
+        assert result is not None
+        assert result.year == 2022
+
+    def test_parse_unix_timestamp_string(self) -> None:
+        """Test parsing Unix timestamp as string."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp("1640995200")
+        assert result is not None
+        assert result.year == 2022
+
+    def test_parse_timestamp_none(self) -> None:
+        """Test parsing None timestamp."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp(None)
+        assert result is None
+
+    def test_parse_timestamp_empty_string(self) -> None:
+        """Test parsing empty string timestamp."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp("")
+        assert result is None
+
+    def test_parse_timestamp_invalid(self) -> None:
+        """Test parsing invalid timestamp."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.parse_timestamp("not-a-timestamp")
+        assert result is None

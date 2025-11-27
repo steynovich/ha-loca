@@ -19,6 +19,7 @@ API_GROUPS_ENDPOINT: str = "Groups.json"
 
 # Update intervals
 DEFAULT_SCAN_INTERVAL: int = 60  # seconds
+API_TIMEOUT: int = 30  # seconds for API request timeout
 
 # HTTP Status Codes
 class HTTPStatus:

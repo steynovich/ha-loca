@@ -18,9 +18,16 @@ from .const import (
     API_LOCATIONS_ENDPOINT,
     API_STATUS_ENDPOINT,
     API_GROUPS_ENDPOINT,
+    API_TIMEOUT,
     HTTPStatus,
 )
-from .error_handling import sanitize_for_logging
+from .error_handling import (
+    LocaAPIUnavailableError,
+    is_connectivity_error,
+    log_connectivity_error,
+    sanitize_for_logging,
+)
+from .validation import DataValidator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -65,15 +72,40 @@ class APIResponseHelper:
 
     @staticmethod
     def parse_timestamp(timestamp: Any) -> datetime | None:
-        """Parse timestamp from various formats."""
+        """Parse timestamp from various formats (Unix timestamp or ISO string)."""
         if not timestamp:
             return None
-        try:
-            from datetime import timezone
-            return datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
-        except (ValueError, TypeError) as e:
-            _LOGGER.debug("Could not parse timestamp %s: %s", timestamp, e)
-            return None
+
+        from datetime import timezone
+
+        # Try Unix timestamp first (integer or float)
+        if isinstance(timestamp, (int, float)):
+            try:
+                return datetime.fromtimestamp(int(timestamp), tz=timezone.utc)
+            except (ValueError, TypeError, OSError) as e:
+                _LOGGER.debug("Could not parse timestamp %s as Unix timestamp: %s", timestamp, e)
+
+        # Try ISO format string
+        if isinstance(timestamp, str):
+            try:
+                # Normalize timezone format
+                ts = timestamp
+                if ts.endswith("Z"):
+                    ts = ts.replace("Z", "+00:00")
+                elif "+" not in ts and "T" in ts:
+                    # Assume UTC if no timezone specified
+                    ts += "+00:00"
+                return datetime.fromisoformat(ts)
+            except ValueError as e:
+                _LOGGER.debug("Could not parse timestamp %s as ISO format: %s", timestamp, e)
+
+            # Last resort: try parsing as Unix timestamp string
+            try:
+                return datetime.fromtimestamp(int(float(timestamp)), tz=timezone.utc)
+            except (ValueError, TypeError, OSError) as e:
+                _LOGGER.debug("Could not parse timestamp %s as numeric string: %s", timestamp, e)
+
+        return None
 
     @staticmethod
     def safe_int_conversion(value: Any, default: int = 0) -> int:
@@ -121,6 +153,16 @@ class LocaAPI:
     def is_authenticated(self) -> bool:
         """Return whether the API client is authenticated."""
         return self._authenticated
+
+    @property
+    def has_credentials(self) -> bool:
+        """Return whether credentials are configured."""
+        return bool(self._api_key and self._username)
+
+    @property
+    def groups_cache_size(self) -> int:
+        """Return the number of groups in cache."""
+        return len(self._groups_cache)
 
     async def _get_session(self) -> ClientSession:
         """Get or create aiohttp session."""
@@ -181,14 +223,18 @@ class LocaAPI:
             return True
         else:
             # No user object found - authentication failed
-            _LOGGER.error("Authentication failed for user '%s' - No user object in response. Full response: %s", self._username, data)
-
-            # Check for error fields
             error_detail = APIResponseHelper.extract_error_message(data)
-
             if error_detail:
-                _LOGGER.error("API error message: %s", error_detail)
-
+                _LOGGER.error(
+                    "Authentication failed for user '%s': %s",
+                    self._username,
+                    error_detail,
+                )
+            else:
+                _LOGGER.error(
+                    "Authentication failed for user '%s' - No user object in response",
+                    self._username,
+                )
             return False
 
     def _handle_auth_error(self, err: Exception) -> None:
@@ -221,30 +267,37 @@ class LocaAPI:
             # Test basic connectivity first
             await self._test_connectivity(session)
 
-            async with session.post(
-                f"{API_BASE_URL}/{API_LOGIN_ENDPOINT}",
-                json=login_data,
-            ) as response:
-                _LOGGER.debug("Authentication request to %s returned status %s", f"{API_BASE_URL}/{API_LOGIN_ENDPOINT}", response.status)
+            async with asyncio.timeout(API_TIMEOUT):
+                async with session.post(
+                    f"{API_BASE_URL}/{API_LOGIN_ENDPOINT}",
+                    json=login_data,
+                ) as response:
+                    _LOGGER.debug("Authentication request to %s returned status %s", f"{API_BASE_URL}/{API_LOGIN_ENDPOINT}", response.status)
 
-                if response.status == HTTPStatus.OK:
-                    try:
-                        data = await response.json()
-                        _LOGGER.debug("Authentication response data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
-                        return self._process_auth_response(data)
-                    except Exception as json_err:
-                        response_text = await response.text()
-                        _LOGGER.error("Failed to parse JSON response for user '%s'. Error: %s, Response: %s", self._username, json_err, response_text[:200])
+                    if response.status == HTTPStatus.OK:
+                        try:
+                            data = await response.json()
+                            _LOGGER.debug("Authentication response data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
+                            return self._process_auth_response(data)
+                        except Exception as json_err:
+                            response_text = await response.text()
+                            _LOGGER.error("Failed to parse JSON response for user '%s'. Error: %s, Response: %s", self._username, json_err, response_text[:200])
+                            return False
+                    else:
+                        try:
+                            error_text = await response.text()
+                            _LOGGER.error("Authentication failed for user '%s' with HTTP status %s: %s", self._username, response.status, error_text[:200])
+                        except Exception:
+                            _LOGGER.error("Authentication failed for user '%s' with HTTP status %s (could not read response)", self._username, response.status)
                         return False
-                else:
-                    try:
-                        error_text = await response.text()
-                        _LOGGER.error("Authentication failed for user '%s' with HTTP status %s: %s", self._username, response.status, error_text[:200])
-                    except Exception:
-                        _LOGGER.error("Authentication failed for user '%s' with HTTP status %s (could not read response)", self._username, response.status)
-                    return False
 
+        except TimeoutError as err:
+            _LOGGER.warning("Authentication request timed out after %s seconds", API_TIMEOUT)
+            raise LocaAPIUnavailableError("Authentication request timed out") from err
         except Exception as err:
+            if is_connectivity_error(err):
+                log_connectivity_error(_LOGGER, "Authentication", err)
+                raise LocaAPIUnavailableError(f"Cannot connect to Loca API: {err}") from err
             self._handle_auth_error(err)
             return False
 
@@ -274,7 +327,10 @@ class LocaAPI:
                     return False
                     
         except Exception as err:
-            _LOGGER.exception("Error during logout: %s", err)
+            if is_connectivity_error(err):
+                log_connectivity_error(_LOGGER, "Logout", err)
+            else:
+                _LOGGER.exception("Error during logout: %s", err)
             return False
 
     async def get_assets(self) -> list[dict[str, Any]]:
@@ -286,49 +342,53 @@ class LocaAPI:
         session = await self._get_session()
         
         try:
-            async with session.post(
-                f"{API_BASE_URL}/{API_ASSETS_ENDPOINT}",
-                json={"key": self._api_key},
-            ) as response:
-                if response.status == HTTPStatus.OK:
-                    data = await response.json()
-                    _LOGGER.debug("Assets response data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
-                    _LOGGER.debug("Full Assets response structure: %s", data)
-                    
-                    # Check for direct assets array or nested structure
-                    assets = None
-                    if isinstance(data, list):
-                        # Response is directly an array of assets
-                        assets = data
-                    elif isinstance(data, dict) and "assets" in data:
-                        # Response has assets field (with status="ok" format)
-                        assets = data.get("assets", [])
-                    elif isinstance(data, dict) and any(key.isdigit() or "asset" in key.lower() for key in data.keys()):
-                        # Response might be a dict of assets
-                        assets = list(data.values()) if all(isinstance(v, dict) for v in data.values()) else []
-                    
-                    if assets is not None:
-                        _LOGGER.info("Successfully retrieved %s assets from Loca API", len(assets))
-                        if not assets:
-                            _LOGGER.info("No devices found in Loca account - this is normal for new accounts")
-                        return assets
+            async with asyncio.timeout(API_TIMEOUT):
+                async with session.post(
+                    f"{API_BASE_URL}/{API_ASSETS_ENDPOINT}",
+                    json={"key": self._api_key},
+                ) as response:
+                    if response.status == HTTPStatus.OK:
+                        data = await response.json()
+                        _LOGGER.debug("Assets response data keys: %s", list(data.keys()) if isinstance(data, dict) else "Not a dict")
+
+                        # Check for direct assets array or nested structure
+                        assets = None
+                        if isinstance(data, list):
+                            # Response is directly an array of assets
+                            assets = data
+                        elif isinstance(data, dict) and "assets" in data:
+                            # Response has assets field (with status="ok" format)
+                            assets = data.get("assets", [])
+                        elif isinstance(data, dict) and any(key.isdigit() or "asset" in key.lower() for key in data.keys()):
+                            # Response might be a dict of assets
+                            _LOGGER.debug("Using fallback asset parsing for dict response")
+                            assets = list(data.values()) if all(isinstance(v, dict) for v in data.values()) else []
+
+                        if assets is not None:
+                            _LOGGER.info("Successfully retrieved %s assets from Loca API", len(assets))
+                            if not assets:
+                                _LOGGER.info("No devices found in Loca account - this is normal for new accounts")
+                            return assets
+                        else:
+                            status = data.get("status", "no status field")
+                            error_detail = APIResponseHelper.extract_error_message(data)
+
+                            if not error_detail:
+                                error_detail = f"Unexpected response format (status='{status}')"
+
+                            _LOGGER.error("Assets request failed: %s", error_detail)
+                            return []
                     else:
-                        status = data.get("status", "no status field")
-                        error_detail = None
-                        
-                        # Check for various error message fields
-                        error_detail = APIResponseHelper.extract_error_message(data)
-                        
-                        if not error_detail:
-                            error_detail = f"API returned status='{status}'. Full response: {data}"
-                        
-                        _LOGGER.error("Assets request failed - API Status: '%s', Error: %s", status, error_detail)
+                        _LOGGER.error("Failed to get assets with status: %s", response.status)
                         return []
-                else:
-                    _LOGGER.error("Failed to get assets with status: %s", response.status)
-                    return []
-                    
+
+        except TimeoutError as err:
+            _LOGGER.warning("Get assets request timed out after %s seconds", API_TIMEOUT)
+            raise LocaAPIUnavailableError("Get assets request timed out") from err
         except Exception as err:
+            if is_connectivity_error(err):
+                log_connectivity_error(_LOGGER, "Get assets", err)
+                raise LocaAPIUnavailableError(f"Cannot connect to Loca API: {err}") from err
             _LOGGER.exception("Error getting assets: %s", err)
             return []
 
@@ -341,58 +401,64 @@ class LocaAPI:
         session = await self._get_session()
         
         try:
-            async with session.post(
-                f"{API_BASE_URL}/{API_LOCATIONS_ENDPOINT}",
-                json={"key": self._api_key},
-            ) as response:
-                if response.status == HTTPStatus.OK:
-                    data = await response.json()
-                    _LOGGER.debug("Locations response data type: %s", type(data))
-                    
-                    # UserLocationList.json returns a direct array of location objects
-                    if isinstance(data, list):
-                        # Response is directly an array of locations (primary format)
-                        locations = data
-                        _LOGGER.debug("Retrieved %s user locations from direct array", len(locations))
-                        return locations
-                    elif isinstance(data, dict):
-                        # Check for nested response format: response.UserLocationList (fallback)
-                        if data.get("response") and isinstance(data["response"], dict):
-                            response_obj = data["response"]
-                            if "UserLocationList" in response_obj:
-                                locations = response_obj["UserLocationList"]
-                                if isinstance(locations, list):
-                                    _LOGGER.debug("Retrieved %s user locations from response.UserLocationList", len(locations))
-                                    return locations
-                        
-                        # Check if it's wrapped in a status response (fallback)
-                        if data.get("status") == "ok" and data.get("locations"):
-                            locations = data.get("locations", [])
-                            _LOGGER.debug("Retrieved %s user locations from wrapped response", len(locations))
-                            return locations
-                        
-                        # Check for direct locations field (fallback)  
-                        if data.get("locations") and isinstance(data["locations"], list):
-                            locations = data["locations"]
-                            _LOGGER.debug("Retrieved %s user locations from direct locations field", len(locations))
-                            return locations
-                        
-                        # Check for error in dict response
-                        error_detail = APIResponseHelper.extract_error_message(data) if isinstance(data, dict) else None
-                        
-                        if error_detail:
-                            _LOGGER.error("Failed to get locations: %s", error_detail)
+            async with asyncio.timeout(API_TIMEOUT):
+                async with session.post(
+                    f"{API_BASE_URL}/{API_LOCATIONS_ENDPOINT}",
+                    json={"key": self._api_key},
+                ) as response:
+                    if response.status == HTTPStatus.OK:
+                        data = await response.json()
+                        _LOGGER.debug("Locations response data type: %s", type(data))
+
+                        # UserLocationList.json returns a direct array of location objects
+                        if isinstance(data, list):
+                            # Response is directly an array of locations (primary format)
+                            _LOGGER.debug("Retrieved %s user locations from direct array", len(data))
+                            return data
+                        elif isinstance(data, dict):
+                            # Check for nested response format: response.UserLocationList (fallback)
+                            if data.get("response") and isinstance(data["response"], dict):
+                                response_obj = data["response"]
+                                if "UserLocationList" in response_obj:
+                                    locations = response_obj["UserLocationList"]
+                                    if isinstance(locations, list):
+                                        _LOGGER.debug("Retrieved %s user locations from response.UserLocationList", len(locations))
+                                        return locations
+
+                            # Check if it's wrapped in a status response (fallback)
+                            if data.get("status") == "ok" and data.get("locations"):
+                                locations = data.get("locations", [])
+                                _LOGGER.debug("Retrieved %s user locations from wrapped response", len(locations))
+                                return locations
+
+                            # Check for direct locations field (fallback)
+                            if data.get("locations") and isinstance(data["locations"], list):
+                                locations = data["locations"]
+                                _LOGGER.debug("Retrieved %s user locations from direct locations field", len(locations))
+                                return locations
+
+                            # Check for error in dict response
+                            error_detail = APIResponseHelper.extract_error_message(data)
+
+                            if error_detail:
+                                _LOGGER.error("Failed to get locations: %s", error_detail)
+                            else:
+                                _LOGGER.error("Unexpected locations response format")
+                            return []
                         else:
-                            _LOGGER.error("Unexpected locations response format: %s", data)
-                        return []
+                            _LOGGER.error("Unexpected locations response type: %s", type(data))
+                            return []
                     else:
-                        _LOGGER.error("Unexpected locations response type: %s", type(data))
+                        _LOGGER.error("Failed to get locations with status: %s", response.status)
                         return []
-                else:
-                    _LOGGER.error("Failed to get locations with status: %s", response.status)
-                    return []
-                    
+
+        except TimeoutError as err:
+            _LOGGER.warning("Get locations request timed out after %s seconds", API_TIMEOUT)
+            raise LocaAPIUnavailableError("Get locations request timed out") from err
         except Exception as err:
+            if is_connectivity_error(err):
+                log_connectivity_error(_LOGGER, "Get locations", err)
+                raise LocaAPIUnavailableError(f"Cannot connect to Loca API: {err}") from err
             _LOGGER.exception("Error getting locations: %s", err)
             return []
 
@@ -405,55 +471,61 @@ class LocaAPI:
         session = await self._get_session()
         
         try:
-            async with session.post(
-                f"{API_BASE_URL}/{API_STATUS_ENDPOINT}",
-                json={"key": self._api_key},
-            ) as response:
-                if response.status == HTTPStatus.OK:
-                    data = await response.json()
-                    _LOGGER.debug("StatusList response data type: %s", type(data))
-                    _LOGGER.debug("Full StatusList response structure: %s", data)
-                    
-                    # StatusList.json returns data nested under StatusList key
-                    if isinstance(data, list):
-                        # Response is directly an array of status entries (fallback)
-                        _LOGGER.debug("Retrieved %s status entries from direct array", len(data))
-                        return data
-                    elif isinstance(data, dict):
-                        # Check for the actual Loca API format: StatusList key
-                        if "StatusList" in data and isinstance(data["StatusList"], list):
-                            status_list = data["StatusList"]
-                            _LOGGER.debug("Retrieved %s status entries from StatusList key", len(status_list))
-                            return status_list
-                        
-                        # Check for various other possible response structures (fallbacks)
-                        if data.get("status") == "ok" and data.get("devices"):
-                            devices = data.get("devices", [])
-                            _LOGGER.debug("Retrieved %s status entries from wrapped response", len(devices))
-                            return devices
-                        
-                        # Check for direct devices field
-                        if data.get("devices") and isinstance(data["devices"], list):
-                            devices = data["devices"]
-                            _LOGGER.debug("Retrieved %s status entries from devices field", len(devices))
-                            return devices
-                        
-                        # Check for error in dict response
-                        error_detail = APIResponseHelper.extract_error_message(data) if isinstance(data, dict) else None
-                        
-                        if error_detail:
-                            _LOGGER.error("Failed to get status list: %s", error_detail)
+            async with asyncio.timeout(API_TIMEOUT):
+                async with session.post(
+                    f"{API_BASE_URL}/{API_STATUS_ENDPOINT}",
+                    json={"key": self._api_key},
+                ) as response:
+                    if response.status == HTTPStatus.OK:
+                        data = await response.json()
+                        _LOGGER.debug("StatusList response data type: %s", type(data))
+
+                        # StatusList.json returns data nested under StatusList key
+                        if isinstance(data, list):
+                            # Response is directly an array of status entries (fallback)
+                            _LOGGER.debug("Retrieved %s status entries from direct array", len(data))
+                            return data
+                        elif isinstance(data, dict):
+                            # Check for the actual Loca API format: StatusList key
+                            if "StatusList" in data and isinstance(data["StatusList"], list):
+                                status_list = data["StatusList"]
+                                _LOGGER.debug("Retrieved %s status entries from StatusList key", len(status_list))
+                                return status_list
+
+                            # Check for various other possible response structures (fallbacks)
+                            if data.get("status") == "ok" and data.get("devices"):
+                                devices = data.get("devices", [])
+                                _LOGGER.debug("Retrieved %s status entries from wrapped response", len(devices))
+                                return devices
+
+                            # Check for direct devices field
+                            if data.get("devices") and isinstance(data["devices"], list):
+                                devices = data["devices"]
+                                _LOGGER.debug("Retrieved %s status entries from devices field", len(devices))
+                                return devices
+
+                            # Check for error in dict response
+                            error_detail = APIResponseHelper.extract_error_message(data)
+
+                            if error_detail:
+                                _LOGGER.error("Failed to get status list: %s", error_detail)
+                            else:
+                                _LOGGER.error("Unexpected StatusList response format")
+                            return []
                         else:
-                            _LOGGER.error("Unexpected StatusList response format: %s", data)
-                        return []
+                            _LOGGER.error("Unexpected StatusList response type: %s", type(data))
+                            return []
                     else:
-                        _LOGGER.error("Unexpected StatusList response type: %s", type(data))
+                        _LOGGER.error("Failed to get status list with status: %s", response.status)
                         return []
-                else:
-                    _LOGGER.error("Failed to get status list with status: %s", response.status)
-                    return []
-                    
+
+        except TimeoutError as err:
+            _LOGGER.warning("Get status list request timed out after %s seconds", API_TIMEOUT)
+            raise LocaAPIUnavailableError("Get status list request timed out") from err
         except Exception as err:
+            if is_connectivity_error(err):
+                log_connectivity_error(_LOGGER, "Get status list", err)
+                raise LocaAPIUnavailableError(f"Cannot connect to Loca API: {err}") from err
             _LOGGER.exception("Error getting status list: %s", err)
             return []
 
@@ -466,39 +538,45 @@ class LocaAPI:
         session = await self._get_session()
         
         try:
-            async with session.post(
-                f"{API_BASE_URL}/{API_GROUPS_ENDPOINT}",
-                json={"key": self._api_key},
-            ) as response:
-                if response.status == HTTPStatus.OK:
-                    data = await response.json()
-                    _LOGGER.debug("Groups response data type: %s", type(data))
-                    _LOGGER.debug("Full Groups response structure: %s", data)
-                    
-                    # Groups.json returns data with groups key
-                    if isinstance(data, dict) and "groups" in data:
-                        groups = data["groups"]
-                        if isinstance(groups, list):
-                            _LOGGER.debug("Retrieved %s groups", len(groups))
-                            return groups
-                    elif isinstance(data, list):
-                        # Response is directly an array of groups (fallback)
-                        _LOGGER.debug("Retrieved %s groups from direct array", len(data))
-                        return data
-                    
-                    # Check for error in response
-                    error_detail = APIResponseHelper.extract_error_message(data)
-                    
-                    if error_detail:
-                        _LOGGER.error("Failed to get groups: %s", error_detail)
+            async with asyncio.timeout(API_TIMEOUT):
+                async with session.post(
+                    f"{API_BASE_URL}/{API_GROUPS_ENDPOINT}",
+                    json={"key": self._api_key},
+                ) as response:
+                    if response.status == HTTPStatus.OK:
+                        data = await response.json()
+                        _LOGGER.debug("Groups response data type: %s", type(data))
+
+                        # Groups.json returns data with groups key
+                        if isinstance(data, dict) and "groups" in data:
+                            groups = data["groups"]
+                            if isinstance(groups, list):
+                                _LOGGER.debug("Retrieved %s groups", len(groups))
+                                return groups
+                        elif isinstance(data, list):
+                            # Response is directly an array of groups (fallback)
+                            _LOGGER.debug("Retrieved %s groups from direct array", len(data))
+                            return data
+
+                        # Check for error in response
+                        error_detail = APIResponseHelper.extract_error_message(data)
+
+                        if error_detail:
+                            _LOGGER.error("Failed to get groups: %s", error_detail)
+                        else:
+                            _LOGGER.error("Unexpected Groups response format")
+                        return []
                     else:
-                        _LOGGER.error("Unexpected Groups response format: %s", data)
-                    return []
-                else:
-                    _LOGGER.error("Failed to get groups with status: %s", response.status)
-                    return []
-                    
+                        _LOGGER.error("Failed to get groups with status: %s", response.status)
+                        return []
+
+        except TimeoutError as err:
+            _LOGGER.warning("Get groups request timed out after %s seconds", API_TIMEOUT)
+            raise LocaAPIUnavailableError("Get groups request timed out") from err
         except Exception as err:
+            if is_connectivity_error(err):
+                log_connectivity_error(_LOGGER, "Get groups", err)
+                raise LocaAPIUnavailableError(f"Cannot connect to Loca API: {err}") from err
             _LOGGER.exception("Error getting groups: %s", err)
             return []
 
@@ -528,15 +606,20 @@ class LocaAPI:
 
     def _extract_location_data(self, history: dict[str, Any]) -> tuple[float, float, datetime | None, int | None]:
         """Extract location and timing data from history."""
-        latitude = APIResponseHelper.safe_float_conversion(history.get("latitude"))
-        longitude = APIResponseHelper.safe_float_conversion(history.get("longitude"))
+        # Use validated coordinates with proper bounds checking
+        latitude, longitude = DataValidator.safe_validate_coordinates(
+            history.get("latitude"),
+            history.get("longitude"),
+        )
         last_seen = APIResponseHelper.parse_timestamp(history.get("time"))
-        battery_level = APIResponseHelper.safe_int_conversion(history.get("charge")) if history.get("charge") is not None else None
+        # Use validated battery level with proper clamping
+        battery_level = DataValidator.validate_battery_level(history.get("charge"))
         return latitude, longitude, last_seen, battery_level
 
     def _extract_quality_metrics(self, history: dict[str, Any]) -> tuple[int, int, int, float]:
         """Extract GPS and signal quality metrics."""
-        gps_accuracy = APIResponseHelper.safe_int_conversion(history.get("HDOP", 1), 1)
+        # Use validated GPS accuracy with minimum enforcement
+        gps_accuracy = DataValidator.validate_gps_accuracy(history.get("HDOP", 1))
         satellites = APIResponseHelper.safe_int_conversion(history.get("SATU"))
         signal_strength = APIResponseHelper.safe_int_conversion(history.get("strength"))
         speed = APIResponseHelper.safe_float_conversion(history.get("speed"))
@@ -610,63 +693,31 @@ class LocaAPI:
         """Parse location data from UserLocationList as device data."""
         device_id = str(location.get("id", ""))
         name = location.get("label", f"Loca Location {device_id}")
-        
+
         _LOGGER.debug("Parsing location as device: %s", location)
-        
-        # Get coordinates from location data
-        latitude = float(location.get("latitude", 0))
-        longitude = float(location.get("longitude", 0))
-        
-        # Parse timestamps
-        update_time = location.get("update", "")
-        
-        # Use the most recent timestamp as last_seen
-        last_seen = None
-        if update_time:
-            try:
-                # Handle various datetime formats
-                if update_time.endswith("Z"):
-                    update_time = update_time.replace("Z", "+00:00")
-                elif "+" not in update_time and "T" in update_time:
-                    # Assume UTC if no timezone specified
-                    update_time += "+00:00"
-                last_seen = datetime.fromisoformat(update_time)
-            except ValueError:
-                _LOGGER.debug("Could not parse update time: %s", update_time)
-        
-        # Create address string using Dutch formatting conventions
-        # Dutch format: "Street Number, Zipcode City, Country"
-        address_parts = []
-        
-        # Street and number (e.g., "Brouwerstraat 30")
-        if location.get("street") and location.get("number"):
-            address_parts.append(f"{location['street']} {location['number']}")
-        elif location.get("street"):
-            address_parts.append(location["street"])
-        
-        # Zipcode and city (e.g., "2984AR Ridderkerk")
-        zipcode_city = []
-        if location.get("zipcode"):
-            zipcode_city.append(location["zipcode"])
-        if location.get("city"):
-            zipcode_city.append(location["city"])
-        
-        if zipcode_city:
-            address_parts.append(" ".join(zipcode_city))
-        
-        # Country (e.g., "Netherlands")
-        if location.get("country"):
-            address_parts.append(location["country"])
-        
-        address = ", ".join(address_parts) if address_parts else None
-        
+
+        # Get validated coordinates from location data
+        latitude, longitude = DataValidator.safe_validate_coordinates(
+            location.get("latitude", 0),
+            location.get("longitude", 0),
+        )
+
+        # Parse timestamp using consolidated helper
+        last_seen = APIResponseHelper.parse_timestamp(location.get("update"))
+
+        # Create address string using consolidated Dutch formatting helper
+        address = APIResponseHelper.format_dutch_address(location)
+
+        # Validate GPS accuracy (use radius as accuracy)
+        gps_accuracy = DataValidator.validate_gps_accuracy(location.get("radius", 100))
+
         return {
             "device_id": device_id,
             "name": name,
             "latitude": latitude,
             "longitude": longitude,
             "battery_level": None,  # Location entries don't have battery info
-            "gps_accuracy": int(location.get("radius", 100)),  # Use radius as accuracy
+            "gps_accuracy": gps_accuracy,
             "last_seen": last_seen,
             "location_source": "GPS",  # Assume GPS for user locations
             "address": address,

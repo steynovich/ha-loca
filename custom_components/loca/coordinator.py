@@ -11,6 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import LocaAPI
+from .error_handling import LocaAPIUnavailableError
 from .repairs import (
     async_create_api_auth_issue,
     async_create_no_devices_issue,
@@ -120,6 +121,11 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
         except ConfigEntryAuthFailed:
             # Re-raise auth errors to trigger reauth flow
             raise
+        except LocaAPIUnavailableError as err:
+            # Handle API unavailability gracefully - already logged in API layer
+            raise UpdateFailed(
+                f"Loca API temporarily unavailable: {err.message}"
+            ) from err
         except Exception as err:
             # Check if error is authentication related
             error_str = str(err).lower()

@@ -1,7 +1,6 @@
 """Support for Loca device sensors."""
 from __future__ import annotations
 
-import asyncio
 from typing import Any
 
 from homeassistant.components.sensor import (
@@ -98,7 +97,6 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
     """Representation of a Loca sensor."""
 
     _attr_has_entity_name = True
-    parallel_updates = asyncio.Semaphore(1)
 
     def __init__(
         self,
