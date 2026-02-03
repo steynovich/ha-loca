@@ -1,17 +1,309 @@
 # Release Notes
 
-## Latest Release: v1.1.1-alpha.1 (Current)
-**Critical authentication fixes** - See [v1.1.1-alpha.1 Release Notes](RELEASE_NOTES_v1.1.1-alpha.1.md)
+All versions of the Loca Device Tracker integration for Home Assistant.
 
-## Previous Releases
-- [v1.0.3](RELEASE_NOTES_v1.0.3.md) - Latest stable release
-- [v1.0.2](RELEASE_NOTES_v1.0.2.md)
-- [v1.0.1](RELEASE_NOTES_v1.0.1.md)
-- [v1.0.0](RELEASE_NOTES_v1.0.0.md) - Initial release
+## Version History
+
+- [v1.1.1-alpha.1](#v111-alpha1---critical-authentication-fixes) - Current (Alpha)
+- [v1.0.3](#v103---security-update) - Latest Stable
+- [v1.0.2](#v102---critical-bug-fixes--security-improvements)
+- [v1.0.1](#v101---bug-fix-release)
+- [v1.0.0](#v100---initial-release)
 
 ---
 
-# Release v1.0.0 - Initial Release
+# v1.1.1-alpha.1 - Critical Authentication Fixes
+
+**Release Date**: Alpha Release
+
+## 🚨 Critical Bug Fixes
+
+This alpha release addresses critical authentication and entity registration issues that broke the integration in v1.1.0.
+
+### Fixed Issues
+
+#### Authentication Failures
+- **Fixed HTTPStatus import conflict**: Resolved `NameError: name 'HTTPStatus' is not defined` that prevented API authentication
+- **Fixed coordinator attribute error**: Resolved `AttributeError: 'LocaDataUpdateCoordinator' object has no attribute 'last_update_success_time'` that prevented entity registration
+
+#### Technical Details
+- **Import Resolution**: Removed conflicting `http.HTTPStatus` import and properly used the local `HTTPStatus` class from constants
+- **Cache Management**: Updated entity data caching to use object identity tracking instead of timestamp-based invalidation
+- **Code Quality**: Fixed 44 linting issues and maintained full type safety with mypy
+
+## 🔧 Technical Improvements
+
+### Code Quality
+- **Linting**: All ruff checks now pass (fixed unused imports, style issues)
+- **Type Safety**: Full mypy compliance across all 25 source files
+- **Import Optimization**: Cleaned up unused imports across the codebase
+
+### Error Handling
+- Improved error handling in the base entity mixin
+- Better cache invalidation logic for entity data
+- More robust coordinator integration
+
+## 🧪 Testing
+
+- ✅ All 29 API tests pass
+- ✅ All 29 sensor tests pass
+- ✅ All integration tests pass
+- ✅ Full type checking compliance
+- ✅ Zero linting issues
+
+## 🚀 Installation
+
+This is an alpha release. To install:
+
+### Manual Installation
+1. Download the `loca` folder from this release
+2. Copy it to your `config/custom_components/` directory
+3. Restart Home Assistant
+4. Reconfigure the integration if authentication was failing
+
+### HACS Installation
+*Alpha releases are not available through HACS*
+
+## ⚠️ Breaking Changes
+
+None - this release only fixes existing functionality.
+
+## 📋 Requirements
+
+- Home Assistant 2024.1.0 or newer
+- Loca API credentials (API key, username, password)
+- Active Loca device subscription
+
+## 🐛 Known Issues
+
+- This is an alpha release - please report any issues on GitHub
+- Test cleanup may show warnings (framework issue, not affecting functionality)
+
+## 🔄 Migration from v1.1.0
+
+If you experienced authentication failures with v1.1.0:
+1. Update to v1.1.1-alpha.1
+2. Restart Home Assistant
+3. The integration should authenticate successfully
+4. All entities should be created properly
+
+## 🤝 Contributing
+
+Found a bug? Please report it on our [GitHub Issues](https://github.com/steynovich/ha-loca/issues) page.
+
+---
+
+**Full Changelog**: v1.1.0...v1.1.1-alpha.1
+- 945371b Fix mypy type errors across multiple modules
+
+**Compatibility**: Home Assistant 2024.1.0+
+
+**Status**: Alpha Release - Use with caution
+
+---
+
+# v1.0.3 - Security Update
+
+## 🔒 Security Fixes
+
+This release addresses important security vulnerabilities discovered during a security audit.
+
+### High Severity
+- **Fixed GPS coordinate exposure in diagnostics**
+  - GPS coordinates (latitude/longitude) are now properly redacted in diagnostic outputs
+  - Address fields are also redacted to prevent location disclosure
+  - Added `has_gps_data` boolean flag to indicate GPS availability without exposing coordinates
+  - This prevents potential privacy breaches when users share diagnostic files for support
+
+### Medium Severity
+- **Fixed partial API key disclosure**
+  - Unique IDs now use SHA256 hash instead of raw API key characters
+  - Removed API key and username length information from diagnostics
+  - This prevents potential credential attacks from partial key exposure
+
+## 🔧 Technical Changes
+
+**Modified Files:**
+- `custom_components/loca/diagnostics.py` - Redact sensitive location data
+- `custom_components/loca/config_flow.py` - Use hash for unique ID generation
+- `tests/test_diagnostics.py` - Update tests for redacted data
+- `tests/test_config_flow.py` - Update tests for new unique ID format
+
+## 📋 Testing
+
+All existing tests have been updated and are passing:
+- Configuration flow tests updated for new unique ID format
+- Diagnostic tests updated to verify proper data redaction
+- Full test suite passes with 100% compatibility
+
+## 🔄 Compatibility
+
+This update is fully backward compatible. No configuration changes are required.
+
+## 📝 Recommendations
+
+Users are strongly encouraged to update to this version to protect their location privacy and credential security.
+
+---
+
+**Full Changelog:** [v1.0.2...v1.0.3](https://github.com/steynovich/ha-loca/compare/v1.0.2...v1.0.3)
+
+---
+
+# v1.0.2 - Critical Bug Fixes & Security Improvements
+
+## 🐛 Critical Bug Fixes
+
+### Security & Stability Improvements
+- **Fixed**: Removed unsafe cookie jar configuration that could pose security risks
+- **Fixed**: Memory leak risk in API client session handling
+- **Fixed**: Race condition in service registration that could cause duplicate service registration
+- **Fixed**: Race condition in entity management during concurrent operations
+
+### Data Integrity Fixes
+- **Fixed**: Inconsistent timezone handling causing datetime comparison issues
+- **Fixed**: Potential division by zero in sensor time parsing that could cause crashes
+- **Fixed**: Missing null checks for datetime objects preventing proper error handling
+- **Fixed**: Config flow unique ID collision when using multiple accounts with same username
+
+### Code Quality Improvements
+- **Fixed**: Direct access to private API authentication state
+- **Removed**: Unused `parse_device_data` method reducing code complexity
+
+## 🔧 Technical Improvements
+
+### API Client Updates
+- Improved session management to prevent memory leaks
+- Added public `is_authenticated` property for proper state access
+- Ensured consistent UTC timezone usage across all datetime operations
+- Removed unsafe cookie jar configuration
+
+### Entity Management
+- Added documentation for Home Assistant's dynamic entity limitations
+- Improved null safety checks for datetime objects
+- Added safe division guards in time parsing logic
+
+### Configuration Flow
+- Improved unique ID generation using username + API key prefix
+- Better support for multiple Loca accounts on same Home Assistant instance
+
+## 📋 Requirements
+
+No changes from v1.0.1:
+- Home Assistant 2024.1.0 or newer
+- Loca API credentials (API key, username, password)
+- Active Loca device subscription
+
+## 🚀 Upgrading
+
+Simply update the integration through HACS or manually replace the `loca` folder in your `custom_components` directory and restart Home Assistant.
+
+## 🔄 Changes from v1.0.1
+
+### Fixed
+- Security vulnerability with unsafe cookie jar
+- Memory leak in session management
+- Race conditions in service and entity management
+- Timezone inconsistencies in datetime handling
+- Division by zero crashes in sensor parsing
+- Config entry unique ID collisions
+- Null reference exceptions with datetime objects
+
+### Improved
+- Code quality and maintainability
+- Error handling and stability
+- Support for multiple accounts
+
+### Removed
+- Unused code reducing maintenance burden
+
+## 📝 Full Changelog
+
+**Security**
+- Removed unsafe cookie jar configuration
+
+**Fixed**
+- Memory leak risk in ClientSession handling
+- Race condition in service registration
+- Race condition in entity management
+- Inconsistent UTC timezone usage
+- Potential division by zero in time parsing
+- Null safety for datetime operations
+- Config flow unique ID generation
+- Private API state access pattern
+
+**Removed**
+- Unused `parse_device_data` method
+
+**Testing**
+- Fixed test suite compatibility with refactored code
+- Updated test fixtures for new API signature
+- Improved test coverage for session management
+
+---
+
+**Compatibility**: Home Assistant 2024.1.0+
+
+**Tested with**: Home Assistant 2024.12.0
+
+---
+
+# v1.0.1 - Bug Fix Release
+
+## 🐛 Bug Fixes
+
+### Fixed Home Assistant aiohttp Session Warning
+- **Issue**: Integration was creating and closing its own aiohttp session, triggering Home Assistant warnings about closing the shared session
+- **Solution**: Updated to properly use Home Assistant's shared aiohttp session via `aiohttp_client`
+- **Impact**: Eliminates warning messages in logs and ensures proper resource management
+
+## 🔧 Technical Improvements
+
+### API Client Updates
+- Modified `LocaAPI` class to accept `HomeAssistant` instance for proper session management
+- Session is now obtained from `aiohttp_client.async_get_clientsession(hass)`
+- Session cleanup only occurs in standalone/testing scenarios (when `hass` is None)
+
+### Integration Points Updated
+- `DataUpdateCoordinator` now passes `hass` instance to `LocaAPI`
+- `ConfigFlow` properly initializes API client with `hass` reference
+- Maintains backward compatibility for testing scenarios
+
+## 📋 Requirements
+
+No changes from v1.0.0:
+- Home Assistant 2024.1.0 or newer
+- Loca API credentials (API key, username, password)
+- Active Loca device subscription
+
+## 🚀 Upgrading
+
+Simply update the integration through HACS or manually replace the `loca` folder in your `custom_components` directory and restart Home Assistant.
+
+## 🔄 Changes from v1.0.0
+
+- Fixed aiohttp session warning by using Home Assistant's shared session
+- Improved resource management and integration stability
+- No breaking changes or configuration updates required
+
+## 📝 Full Changelog
+
+**Fixed**
+- Home Assistant aiohttp session warning when closing shared session
+
+**Changed**
+- API client now uses Home Assistant's shared aiohttp session
+- Session management aligned with Home Assistant best practices
+
+---
+
+**Compatibility**: Home Assistant 2024.1.0+
+
+**Tested with**: Home Assistant 2024.12.0
+
+---
+
+# v1.0.0 - Initial Release
 
 ## 🎉 First Stable Release
 
