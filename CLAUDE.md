@@ -381,7 +381,8 @@ HomeAssistantError
 
 ## Version History
 
-- **1.1.5** (Current) - Fixed AttributeError for last_update_success_time
+- **1.1.6** (Current) - Maintenance release with project improvements
+- **1.1.5** - Fixed AttributeError for last_update_success_time
 - **1.1.4** - Entity initialization improvements
 - **1.1.3** - Coordinator stability fixes
 - **1.1.2** - Diagnostics privacy enhancements
