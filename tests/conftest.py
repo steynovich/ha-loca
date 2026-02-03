@@ -1,11 +1,12 @@
 """Common fixtures for Loca tests."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+import pytest
 
 from custom_components.loca.const import CONF_API_KEY, DOMAIN
 
@@ -24,7 +25,7 @@ def expected_lingering_tasks():
     return True
 
 
-@pytest.fixture  
+@pytest.fixture
 def expected_lingering_timers():
     """Fixture to allow expected lingering timers."""
     return True
@@ -55,6 +56,7 @@ def mock_config_entry():
         entry_id="test_entry_id",
         discovery_keys=set(),
         unique_id="test_user",
+        subentries_data=frozenset(),  # Required in newer HA versions
     )
 
 
@@ -163,7 +165,7 @@ def mock_coordinator():
 def mock_coordinator_with_data(mock_status_list_data):
     """Create a mock coordinator with data."""
     from datetime import datetime
-    
+
     coordinator = MagicMock()
     coordinator.data = {
         "12345": {

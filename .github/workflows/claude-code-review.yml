@@ -21,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write  # Claude needs write access to post review comments
+      issues: write         # Claude needs write access to create issues
       id-token: write
 
     steps:

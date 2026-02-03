@@ -1,18 +1,20 @@
 """Tests for Loca services functionality."""
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock, patch
+
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import UpdateFailed
+import pytest
 
-from custom_components.loca.services import (
-    async_setup_services,
-    async_unload_services,
-    SERVICE_REFRESH_DEVICES,
-    SERVICE_FORCE_UPDATE,
-)
 from custom_components.loca.const import DOMAIN
 from custom_components.loca.error_handling import LocaAPIUnavailableError
+from custom_components.loca.services import (
+    SERVICE_FORCE_UPDATE,
+    SERVICE_REFRESH_DEVICES,
+    async_setup_services,
+    async_unload_services,
+)
 
 
 class TestServiceSetup:
@@ -22,7 +24,7 @@ class TestServiceSetup:
     async def test_setup_services(self, hass: HomeAssistant):
         """Test service registration."""
         await async_setup_services(hass)
-        
+
         # Check that services were registered
         assert hass.services.has_service(DOMAIN, SERVICE_REFRESH_DEVICES)
         assert hass.services.has_service(DOMAIN, SERVICE_FORCE_UPDATE)
@@ -34,10 +36,10 @@ class TestServiceSetup:
         await async_setup_services(hass)
         assert hass.services.has_service(DOMAIN, SERVICE_REFRESH_DEVICES)
         assert hass.services.has_service(DOMAIN, SERVICE_FORCE_UPDATE)
-        
+
         # Then unload them
         await async_unload_services(hass)
-        
+
         # Check that services were unregistered
         assert not hass.services.has_service(DOMAIN, SERVICE_REFRESH_DEVICES)
         assert not hass.services.has_service(DOMAIN, SERVICE_FORCE_UPDATE)
@@ -63,19 +65,29 @@ class TestRefreshDevicesService:
         return entry
 
     @pytest.mark.asyncio
-    async def test_refresh_devices_success(self, hass: HomeAssistant, mock_config_entry, mock_coordinator):
+    async def test_refresh_devices_success(
+        self, hass: HomeAssistant, mock_config_entry, mock_coordinator
+    ):
         """Test successful device refresh through service call."""
         # Setup services
         await async_setup_services(hass)
-        
+
         # Mock config entries
-        with patch.object(hass.config_entries, 'async_get_entry', return_value=mock_config_entry), \
-             patch('custom_components.loca.services.async_extract_config_entry_ids', 
-                   return_value=['test_entry_123']):
-            
+        with (
+            patch.object(
+                hass.config_entries, "async_get_entry", return_value=mock_config_entry
+            ),
+            patch(
+                "custom_components.loca.services.async_extract_config_entry_ids",
+                new_callable=AsyncMock,
+                return_value=["test_entry_123"],
+            ),
+        ):
             # Call the service
-            await hass.services.async_call(DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True)
-            
+            await hass.services.async_call(
+                DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+            )
+
             # Should refresh the coordinator
             mock_coordinator.async_request_refresh.assert_called_once()
 
@@ -84,44 +96,70 @@ class TestRefreshDevicesService:
         """Test refresh devices when no valid config entries."""
         # Setup services
         await async_setup_services(hass)
-        
-        with patch('custom_components.loca.services.async_extract_config_entry_ids', 
-                   return_value=[]):
-            
+
+        with patch(
+            "custom_components.loca.services.async_extract_config_entry_ids",
+            new_callable=AsyncMock,
+            return_value=[],
+        ):
             # Call the service - should raise ServiceValidationError
-            with pytest.raises(HomeAssistantError, match="No Loca config entries found"):
-                await hass.services.async_call(DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True)
+            with pytest.raises(
+                HomeAssistantError, match="No Loca config entries found"
+            ):
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                )
 
     @pytest.mark.asyncio
     async def test_refresh_devices_invalid_entry(self, hass: HomeAssistant):
         """Test refresh devices with invalid config entry."""
         # Setup services
         await async_setup_services(hass)
-        
-        with patch.object(hass.config_entries, 'async_get_entry', return_value=None), \
-             patch('custom_components.loca.services.async_extract_config_entry_ids', 
-                   return_value=['invalid_entry']):
-            
+
+        with (
+            patch.object(hass.config_entries, "async_get_entry", return_value=None),
+            patch(
+                "custom_components.loca.services.async_extract_config_entry_ids",
+                new_callable=AsyncMock,
+                return_value=["invalid_entry"],
+            ),
+        ):
             # Call the service - should raise error
-            with pytest.raises(HomeAssistantError, match="Config entry invalid_entry not found"):
-                await hass.services.async_call(DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True)
+            with pytest.raises(
+                HomeAssistantError, match="Config entry invalid_entry not found"
+            ):
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                )
 
     @pytest.mark.asyncio
-    async def test_refresh_devices_coordinator_error(self, hass: HomeAssistant, mock_config_entry, mock_coordinator):
+    async def test_refresh_devices_coordinator_error(
+        self, hass: HomeAssistant, mock_config_entry, mock_coordinator
+    ):
         """Test refresh devices when coordinator fails."""
         # Setup services
         await async_setup_services(hass)
-        
+
         # Make coordinator fail
         mock_coordinator.async_request_refresh.side_effect = Exception("Refresh failed")
-        
-        with patch.object(hass.config_entries, 'async_get_entry', return_value=mock_config_entry), \
-             patch('custom_components.loca.services.async_extract_config_entry_ids', 
-                   return_value=['test_entry_123']):
-            
+
+        with (
+            patch.object(
+                hass.config_entries, "async_get_entry", return_value=mock_config_entry
+            ),
+            patch(
+                "custom_components.loca.services.async_extract_config_entry_ids",
+                new_callable=AsyncMock,
+                return_value=["test_entry_123"],
+            ),
+        ):
             # Call the service - should raise HomeAssistantError
-            with pytest.raises(HomeAssistantError, match="Failed to refresh devices"):
-                await hass.services.async_call(DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True)
+            with pytest.raises(
+                HomeAssistantError, match="Unexpected error refreshing devices"
+            ):
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                )
 
 
 class TestForceUpdateService:
@@ -136,7 +174,7 @@ class TestForceUpdateService:
                 "device_id": "test_device_123",
                 "name": "Test Device",
                 "latitude": 52.1234,
-                "longitude": 4.5678
+                "longitude": 4.5678,
             }
         }
         coordinator.async_request_refresh = AsyncMock()
@@ -151,16 +189,27 @@ class TestForceUpdateService:
         return entry
 
     @pytest.mark.asyncio
-    async def test_force_update_success(self, hass: HomeAssistant, mock_config_entry_with_device, mock_coordinator_with_device):
+    async def test_force_update_success(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
+    ):
         """Test successful device force update."""
         # Setup services
         await async_setup_services(hass)
-        
-        with patch.object(hass.config_entries, 'async_entries', return_value=[mock_config_entry_with_device]):
+
+        with patch.object(
+            hass.config_entries,
+            "async_entries",
+            return_value=[mock_config_entry_with_device],
+        ):
             # Call the service
             call_data = {"device_id": "test_device_123"}
-            await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
-            
+            await hass.services.async_call(
+                DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+            )
+
             # Should refresh the coordinator
             mock_coordinator_with_device.async_request_refresh.assert_called_once()
 
@@ -169,96 +218,131 @@ class TestForceUpdateService:
         """Test force update when device not found."""
         # Setup services
         await async_setup_services(hass)
-        
+
         # Mock empty coordinator
         coordinator = MagicMock()
         coordinator.data = {}
-        
+
         entry = MagicMock()
         entry.domain = DOMAIN
         entry.runtime_data = coordinator
-        
-        with patch.object(hass.config_entries, 'async_entries', return_value=[entry]):
+
+        with patch.object(hass.config_entries, "async_entries", return_value=[entry]):
             # Call the service - should raise error
             call_data = {"device_id": "nonexistent_device"}
-            with pytest.raises(HomeAssistantError, match="Device 'nonexistent_device' not found"):
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+            with pytest.raises(
+                HomeAssistantError, match="Device 'nonexistent_device' not found"
+            ):
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
     @pytest.mark.asyncio
     async def test_force_update_missing_device_id(self, hass: HomeAssistant):
         """Test force update service without device_id parameter."""
         # Setup services
         await async_setup_services(hass)
-        
+
         # Call the service without device_id - should raise validation error
         call_data: dict[str, str] = {}
-        with pytest.raises(Exception):  # Schema validation will fail before service is called
-            await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+        with pytest.raises(
+            Exception
+        ):  # Schema validation will fail before service is called
+            await hass.services.async_call(
+                DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+            )
 
     @pytest.mark.asyncio
     async def test_force_update_empty_device_id(self, hass: HomeAssistant):
         """Test force update service with empty device_id."""
         # Setup services
         await async_setup_services(hass)
-        
-        with patch.object(hass.config_entries, 'async_entries', return_value=[]):
+
+        with patch.object(hass.config_entries, "async_entries", return_value=[]):
             # Call the service with empty device_id
             call_data = {"device_id": ""}
             with pytest.raises(HomeAssistantError, match="Device ID is required"):
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
     @pytest.mark.asyncio
     async def test_force_update_no_config_entries(self, hass: HomeAssistant):
         """Test force update when no Loca config entries."""
         # Setup services
         await async_setup_services(hass)
-        
-        with patch.object(hass.config_entries, 'async_entries', return_value=[]):
+
+        with patch.object(hass.config_entries, "async_entries", return_value=[]):
             # Call the service
             call_data = {"device_id": "test_device_123"}
-            with pytest.raises(HomeAssistantError, match="Device 'test_device_123' not found"):
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+            with pytest.raises(
+                HomeAssistantError, match="Device 'test_device_123' not found"
+            ):
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
     @pytest.mark.asyncio
-    async def test_force_update_multiple_entries(self, hass: HomeAssistant, mock_coordinator_with_device):
+    async def test_force_update_multiple_entries(
+        self, hass: HomeAssistant, mock_coordinator_with_device
+    ):
         """Test force update with multiple config entries."""
         # Setup services
         await async_setup_services(hass)
-        
+
         # First entry without the device
         coordinator1 = MagicMock()
         coordinator1.data = {}
         entry1 = MagicMock()
         entry1.domain = DOMAIN
         entry1.runtime_data = coordinator1
-        
+
         # Second entry with the device
         entry2 = MagicMock()
         entry2.domain = DOMAIN
         entry2.runtime_data = mock_coordinator_with_device
-        
-        with patch.object(hass.config_entries, 'async_entries', return_value=[entry1, entry2]):
+
+        with patch.object(
+            hass.config_entries, "async_entries", return_value=[entry1, entry2]
+        ):
             # Call the service
             call_data = {"device_id": "test_device_123"}
-            await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
-            
+            await hass.services.async_call(
+                DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+            )
+
             # Should find device in second entry and refresh that coordinator
             mock_coordinator_with_device.async_request_refresh.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_force_update_coordinator_error(self, hass: HomeAssistant, mock_config_entry_with_device, mock_coordinator_with_device):
+    async def test_force_update_coordinator_error(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
+    ):
         """Test force update when coordinator fails."""
         # Setup services
         await async_setup_services(hass)
-        
+
         # Make coordinator fail
-        mock_coordinator_with_device.async_request_refresh.side_effect = Exception("Update failed")
-        
-        with patch.object(hass.config_entries, 'async_entries', return_value=[mock_config_entry_with_device]):
+        mock_coordinator_with_device.async_request_refresh.side_effect = Exception(
+            "Update failed"
+        )
+
+        with patch.object(
+            hass.config_entries,
+            "async_entries",
+            return_value=[mock_config_entry_with_device],
+        ):
             # Call the service - should raise HomeAssistantError
             call_data = {"device_id": "test_device_123"}
-            with pytest.raises(HomeAssistantError, match="Failed to force update device"):
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+            with pytest.raises(
+                HomeAssistantError, match="Unexpected error force updating device"
+            ):
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
 
 class TestServiceValidation:
@@ -268,7 +352,7 @@ class TestServiceValidation:
     async def test_service_schemas_registered(self, hass: HomeAssistant):
         """Test that services are registered with proper schemas."""
         await async_setup_services(hass)
-        
+
         # Check that services exist and are callable (implies they have schemas)
         assert hass.services.has_service(DOMAIN, SERVICE_REFRESH_DEVICES)
         assert hass.services.has_service(DOMAIN, SERVICE_FORCE_UPDATE)
@@ -290,7 +374,7 @@ class TestServiceIntegration:
         await async_setup_services(hass)
         assert hass.services.has_service(DOMAIN, SERVICE_REFRESH_DEVICES)
         assert hass.services.has_service(DOMAIN, SERVICE_FORCE_UPDATE)
-        
+
         # Unload services
         await async_unload_services(hass)
         assert not hass.services.has_service(DOMAIN, SERVICE_REFRESH_DEVICES)
@@ -303,13 +387,17 @@ class TestServiceIntegration:
         await async_setup_services(hass)
 
         # Mock config entries to cause an error
-        with patch.object(hass.config_entries, 'async_entries', side_effect=Exception("Test error")):
+        with patch.object(
+            hass.config_entries, "async_entries", side_effect=Exception("Test error")
+        ):
             call_data = {"device_id": "test_device"}
             with pytest.raises(HomeAssistantError):
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
             # Check that error was logged
-            assert "Failed to force update device" in caplog.text
+            assert "Unexpected error force updating device" in caplog.text
 
 
 class TestServiceSpecificErrors:
@@ -339,7 +427,10 @@ class TestServiceSpecificErrors:
 
     @pytest.mark.asyncio
     async def test_refresh_api_unavailable_error(
-        self, hass: HomeAssistant, mock_config_entry_with_device, mock_coordinator_with_device
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
     ):
         """Test refresh when API is unavailable."""
         await async_setup_services(hass)
@@ -348,38 +439,64 @@ class TestServiceSpecificErrors:
             LocaAPIUnavailableError("API temporarily unavailable")
         )
 
-        with patch.object(hass.config_entries, 'async_get_entry', return_value=mock_config_entry_with_device), \
-             patch('custom_components.loca.services.async_extract_config_entry_ids',
-                   return_value=['test_entry_123']):
-
+        with (
+            patch.object(
+                hass.config_entries,
+                "async_get_entry",
+                return_value=mock_config_entry_with_device,
+            ),
+            patch(
+                "custom_components.loca.services.async_extract_config_entry_ids",
+                new_callable=AsyncMock,
+                return_value=["test_entry_123"],
+            ),
+        ):
             with pytest.raises(HomeAssistantError) as exc_info:
-                await hass.services.async_call(DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                )
 
             assert "temporarily unavailable" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_refresh_update_failed_error(
-        self, hass: HomeAssistant, mock_config_entry_with_device, mock_coordinator_with_device
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
     ):
         """Test refresh when coordinator update fails."""
         await async_setup_services(hass)
 
-        mock_coordinator_with_device.async_request_refresh.side_effect = (
-            UpdateFailed("Failed to communicate with API")
+        mock_coordinator_with_device.async_request_refresh.side_effect = UpdateFailed(
+            "Failed to communicate with API"
         )
 
-        with patch.object(hass.config_entries, 'async_get_entry', return_value=mock_config_entry_with_device), \
-             patch('custom_components.loca.services.async_extract_config_entry_ids',
-                   return_value=['test_entry_123']):
-
+        with (
+            patch.object(
+                hass.config_entries,
+                "async_get_entry",
+                return_value=mock_config_entry_with_device,
+            ),
+            patch(
+                "custom_components.loca.services.async_extract_config_entry_ids",
+                new_callable=AsyncMock,
+                return_value=["test_entry_123"],
+            ),
+        ):
             with pytest.raises(HomeAssistantError) as exc_info:
-                await hass.services.async_call(DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                )
 
             assert "Failed to refresh devices" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_force_update_api_unavailable_error(
-        self, hass: HomeAssistant, mock_config_entry_with_device, mock_coordinator_with_device
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
     ):
         """Test force update when API is unavailable."""
         await async_setup_services(hass)
@@ -388,37 +505,50 @@ class TestServiceSpecificErrors:
             LocaAPIUnavailableError("Cannot connect to Loca API")
         )
 
-        with patch.object(hass.config_entries, 'async_entries', return_value=[mock_config_entry_with_device]):
+        with patch.object(
+            hass.config_entries,
+            "async_entries",
+            return_value=[mock_config_entry_with_device],
+        ):
             call_data = {"device_id": "test_device_123"}
 
             with pytest.raises(HomeAssistantError) as exc_info:
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
             assert "temporarily unavailable" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_force_update_update_failed_error(
-        self, hass: HomeAssistant, mock_config_entry_with_device, mock_coordinator_with_device
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
     ):
         """Test force update when coordinator update fails."""
         await async_setup_services(hass)
 
-        mock_coordinator_with_device.async_request_refresh.side_effect = (
-            UpdateFailed("Communication error")
+        mock_coordinator_with_device.async_request_refresh.side_effect = UpdateFailed(
+            "Communication error"
         )
 
-        with patch.object(hass.config_entries, 'async_entries', return_value=[mock_config_entry_with_device]):
+        with patch.object(
+            hass.config_entries,
+            "async_entries",
+            return_value=[mock_config_entry_with_device],
+        ):
             call_data = {"device_id": "test_device_123"}
 
             with pytest.raises(HomeAssistantError) as exc_info:
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
             assert "Failed to force update device" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_force_update_with_none_data(
-        self, hass: HomeAssistant
-    ):
+    async def test_force_update_with_none_data(self, hass: HomeAssistant):
         """Test force update when coordinator data is None."""
         await async_setup_services(hass)
 
@@ -430,10 +560,12 @@ class TestServiceSpecificErrors:
         entry.domain = DOMAIN
         entry.runtime_data = coordinator
 
-        with patch.object(hass.config_entries, 'async_entries', return_value=[entry]):
+        with patch.object(hass.config_entries, "async_entries", return_value=[entry]):
             call_data = {"device_id": "test_device"}
 
             with pytest.raises(HomeAssistantError) as exc_info:
-                await hass.services.async_call(DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True)
+                await hass.services.async_call(
+                    DOMAIN, SERVICE_FORCE_UPDATE, call_data, blocking=True
+                )
 
             assert "not found" in str(exc_info.value)

@@ -1,4 +1,5 @@
 """Input validation utilities for Loca integration."""
+
 from __future__ import annotations
 
 import logging
@@ -24,13 +25,23 @@ class DataValidator:
             lat = float(latitude)
             lon = float(longitude)
         except (ValueError, TypeError) as err:
-            raise ValidationError(f"Invalid coordinate values: {latitude}, {longitude}") from err
+            raise ValidationError(
+                f"Invalid coordinate values: {latitude}, {longitude}"
+            ) from err
 
-        if not (LocationConstants.MIN_LATITUDE <= lat <= LocationConstants.MAX_LATITUDE):
-            raise ValidationError(f"Latitude {lat} out of valid range ({LocationConstants.MIN_LATITUDE}, {LocationConstants.MAX_LATITUDE})")
+        if not (
+            LocationConstants.MIN_LATITUDE <= lat <= LocationConstants.MAX_LATITUDE
+        ):
+            raise ValidationError(
+                f"Latitude {lat} out of valid range ({LocationConstants.MIN_LATITUDE}, {LocationConstants.MAX_LATITUDE})"
+            )
 
-        if not (LocationConstants.MIN_LONGITUDE <= lon <= LocationConstants.MAX_LONGITUDE):
-            raise ValidationError(f"Longitude {lon} out of valid range ({LocationConstants.MIN_LONGITUDE}, {LocationConstants.MAX_LONGITUDE})")
+        if not (
+            LocationConstants.MIN_LONGITUDE <= lon <= LocationConstants.MAX_LONGITUDE
+        ):
+            raise ValidationError(
+                f"Longitude {lon} out of valid range ({LocationConstants.MIN_LONGITUDE}, {LocationConstants.MAX_LONGITUDE})"
+            )
 
         return lat, lon
 
@@ -65,7 +76,11 @@ class DataValidator:
     def validate_gps_accuracy(accuracy: Any) -> int:
         """Validate GPS accuracy."""
         try:
-            acc = int(float(accuracy)) if accuracy is not None else LocationConstants.DEFAULT_GPS_ACCURACY
+            acc = (
+                int(float(accuracy))
+                if accuracy is not None
+                else LocationConstants.DEFAULT_GPS_ACCURACY
+            )
             return max(1, acc)  # Ensure positive accuracy
         except (ValueError, TypeError):
             _LOGGER.warning("Invalid GPS accuracy value: %s", accuracy)
@@ -123,7 +138,9 @@ class DataValidator:
             "label": str(label),
             "latitude": lat,
             "longitude": lon,
-            "radius": max(1, int(entry.get("radius", LocationConstants.DEFAULT_GPS_ACCURACY))),
+            "radius": max(
+                1, int(entry.get("radius", LocationConstants.DEFAULT_GPS_ACCURACY))
+            ),
             "street": str(entry.get("street", "")),
             "number": str(entry.get("number", "")),
             "city": str(entry.get("city", "")),
@@ -134,7 +151,9 @@ class DataValidator:
         }
 
     @classmethod
-    def safe_validate_coordinates(cls, latitude: Any, longitude: Any) -> tuple[float, float]:
+    def safe_validate_coordinates(
+        cls, latitude: Any, longitude: Any
+    ) -> tuple[float, float]:
         """Safely validate coordinates with fallback to (0,0)."""
         try:
             return cls.validate_coordinates(latitude, longitude)

@@ -1,4 +1,5 @@
 """The Loca Device Tracker integration."""
+
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,18 +16,18 @@ PLATFORMS: list[Platform] = [Platform.DEVICE_TRACKER, Platform.SENSOR]
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Loca from a config entry."""
     coordinator = LocaDataUpdateCoordinator(hass, entry)
-    
+
     await coordinator.async_config_entry_first_refresh()
-    
+
     # Store coordinator in runtime_data (modern approach)
     entry.runtime_data = coordinator
-    
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    
+
     # Set up services if not already registered (thread-safe check)
     if not hass.services.has_service(DOMAIN, "refresh_devices"):
         await async_setup_services(hass)
-    
+
     return True
 
 
@@ -36,15 +37,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinator = entry.runtime_data
         if coordinator:
             await coordinator.async_shutdown()
-        
+
         # Unload services if this is the last config entry being unloaded
         remaining_entries = [
-            entry for entry in hass.config_entries.async_entries(DOMAIN)
+            entry
+            for entry in hass.config_entries.async_entries(DOMAIN)
             if entry.state.value == "loaded"
         ]
         if len(remaining_entries) <= 1:
             await async_unload_services(hass)
-    
+
     return unload_ok
 
 

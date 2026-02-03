@@ -1,13 +1,11 @@
 """Tests for validation utilities."""
+
 from __future__ import annotations
 
 import pytest
 
 from custom_components.loca.const import LocationConstants
-from custom_components.loca.validation import (
-    DataValidator,
-    ValidationError,
-)
+from custom_components.loca.validation import DataValidator, ValidationError
 
 
 class TestValidateCoordinates:

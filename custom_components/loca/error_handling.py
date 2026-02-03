@@ -1,9 +1,11 @@
 """Error handling utilities for Loca integration."""
+
 from __future__ import annotations
 
-import logging
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any, Awaitable, Callable, TypeVar, Union
+import logging
+from typing import Any, TypeVar
 
 from aiohttp import ClientConnectorError, ServerTimeoutError
 
@@ -49,7 +51,9 @@ def is_connectivity_error(err: Exception) -> bool:
     return any(pattern in error_str for pattern in NETWORK_ERROR_PATTERNS)
 
 
-def log_connectivity_error(logger: logging.Logger, operation: str, err: Exception) -> None:
+def log_connectivity_error(
+    logger: logging.Logger, operation: str, err: Exception
+) -> None:
     """Log a connectivity error without the full stack trace."""
     error_type = type(err).__name__
     error_msg = str(err)
@@ -76,25 +80,32 @@ def log_connectivity_error(logger: logging.Logger, operation: str, err: Exceptio
             error_msg[:100],
         )
 
-T = TypeVar('T')
+
+T = TypeVar("T")
 
 
 def handle_api_errors(default_return: Any = None, log_prefix: str = "API operation"):
     """Decorator for consistent API error handling."""
-    def decorator(func: Callable[..., Awaitable[T]]) -> Callable[..., Awaitable[Union[T, Any]]]:
+
+    def decorator(
+        func: Callable[..., Awaitable[T]],
+    ) -> Callable[..., Awaitable[T | Any]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> Union[T, Any]:
+        async def wrapper(*args, **kwargs) -> T | Any:
             try:
                 return await func(*args, **kwargs)
             except Exception as err:
                 _LOGGER.exception(f"{log_prefix} failed: %s", err)
                 return default_return
+
         return wrapper
+
     return decorator
 
 
 def handle_config_flow_errors(func: Callable[..., T]) -> Callable[..., T]:
     """Decorator for consistent config flow error handling."""
+
     @wraps(func)
     async def wrapper(self, user_input=None):
         errors = {}
@@ -111,11 +122,12 @@ def handle_config_flow_errors(func: Callable[..., T]) -> Callable[..., T]:
 
             # Return form with errors
             return self.async_show_form(
-                step_id=getattr(self, '_current_step', 'user'),
-                data_schema=getattr(self, '_schema', {}),
-                errors=errors
+                step_id=getattr(self, "_current_step", "user"),
+                data_schema=getattr(self, "_schema", {}),
+                errors=errors,
             )
         return await func(self, user_input)
+
     return wrapper
 
 

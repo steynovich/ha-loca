@@ -6,7 +6,7 @@
         "description": "Inserisci le tue credenziali API Loca per connettere i tuoi dispositivi a Home Assistant.",
         "data": {
           "api_key": "API key",
-          "username": "Nome utente", 
+          "username": "Nome utente",
           "password": "Password"
         }
       },
@@ -15,7 +15,7 @@
         "description": "Le credenziali API Loca per {username} devono essere aggiornate. Inserisci le tue credenziali attuali.",
         "data": {
           "api_key": "API key",
-          "username": "Nome utente", 
+          "username": "Nome utente",
           "password": "Password"
         }
       }
@@ -83,6 +83,24 @@
     "no_devices_found": {
       "title": "Nessun dispositivo trovato",
       "description": "Nessun dispositivo trovato per l'account Loca {account}. Questo è normale per account nuovi. Se hai dispositivi, assicurati che siano configurati correttamente e attivi nel tuo account Loca."
+    }
+  },
+  "services": {
+    "refresh_devices": {
+      "name": "Refresh devices",
+      "description": "Manually refresh device data from the Loca API."
+    },
+    "force_update": {
+      "name": "Force update",
+      "description": "Force an immediate update for a specific device."
+    }
+  },
+  "exceptions": {
+    "rate_limit_refresh": {
+      "message": "Rate limit: Please wait {seconds} more seconds before refreshing again"
+    },
+    "rate_limit_update": {
+      "message": "Rate limit: Please wait {seconds} more seconds before updating device again"
     }
   }
 }
