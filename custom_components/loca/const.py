@@ -1,4 +1,5 @@
 """Constants for the Loca Device Tracker integration."""
+
 from __future__ import annotations
 
 DOMAIN: str = "loca"
@@ -21,26 +22,37 @@ API_GROUPS_ENDPOINT: str = "Groups.json"
 DEFAULT_SCAN_INTERVAL: int = 60  # seconds
 API_TIMEOUT: int = 30  # seconds for API request timeout
 
+# Coordinator behavior
+EMPTY_DEVICE_THRESHOLD: int = (
+    2  # Number of consecutive empty device lists before creating repair issue
+)
+
+
 # HTTP Status Codes
 class HTTPStatus:
     """HTTP status codes used in the integration."""
+
     OK = 200
     FORBIDDEN = 403
     NOT_FOUND = 404
     UNAUTHORIZED = 401
 
+
 # Time Constants
 class TimeConstants:
     """Time conversion constants."""
+
     SECONDS_PER_MINUTE = 60
     SECONDS_PER_HOUR = 3600
     SECONDS_PER_DAY = 86400
     HOURS_PER_DAY = 24
     MINUTES_PER_HOUR = 60
 
+
 # API Response Constants
 class APIConstants:
     """Constants for API responses and error handling."""
+
     ERROR_FIELDS = ["message", "error", "description", "detail", "reason"]
     CONNECTIVITY_TEST_ERRORS = [
         "cannot connect to host",
@@ -51,9 +63,11 @@ class APIConstants:
     ]
     AUTH_ERROR_TERMS = ["auth", "401", "403", "unauthorized", "forbidden"]
 
+
 # Location Constants
 class LocationConstants:
     """Constants for location processing."""
+
     GPS_ORIGIN_TYPE = 1
     CELL_TOWER_ORIGIN_TYPE = 2
     GPS_SOURCE_NAME = "GPS"
@@ -63,6 +77,7 @@ class LocationConstants:
     MAX_LATITUDE = 90
     MIN_LONGITUDE = -180
     MAX_LONGITUDE = 180
+
 
 # Device attributes
 ATTR_BATTERY_LEVEL: str = "battery_level"

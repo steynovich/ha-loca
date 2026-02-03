@@ -1,19 +1,21 @@
 """Tests for Loca repairs functionality."""
-import pytest
+
 from unittest.mock import AsyncMock, MagicMock, patch
+
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import issue_registry as ir
+import pytest
 
+from custom_components.loca.const import DOMAIN
 from custom_components.loca.repairs import (
-    NoDevicesFoundRepairFlow,
     ApiAuthenticationFailedRepairFlow,
     DeprecatedYamlConfigurationRepairFlow,
+    NoDevicesFoundRepairFlow,
+    async_create_api_auth_issue,
     async_create_fix_flow,
     async_create_issue,
     async_create_no_devices_issue,
-    async_create_api_auth_issue,
 )
-from custom_components.loca.const import DOMAIN
 
 
 class TestRepairFlows:
@@ -26,15 +28,15 @@ class TestRepairFlows:
         hass.config_entries = MagicMock()
         return hass
 
-    @pytest.fixture 
+    @pytest.fixture
     def mock_config_entry(self):
         """Create a mock config entry."""
         entry = MagicMock()
         entry.entry_id = "test_entry_id"
         entry.data = {
             "api_key": "test_key",
-            "username": "test_user", 
-            "password": "test_pass"
+            "username": "test_user",
+            "password": "test_pass",
         }
         return entry
 
@@ -43,9 +45,9 @@ class TestRepairFlows:
         """Test NoDevicesFoundRepairFlow initialization."""
         flow = NoDevicesFoundRepairFlow()
         flow.hass = mock_hass
-        
+
         result = await flow.async_step_init()
-        
+
         assert result["type"] == "form"
         assert result["step_id"] == "init"
         assert "description_placeholders" in result
@@ -55,9 +57,9 @@ class TestRepairFlows:
         """Test ApiAuthenticationFailedRepairFlow initialization."""
         flow = ApiAuthenticationFailedRepairFlow()
         flow.hass = mock_hass
-        
+
         result = await flow.async_step_init()
-        
+
         assert result["type"] == "form"
         assert result["step_id"] == "init"
         assert "description_placeholders" in result
@@ -67,11 +69,13 @@ class TestRepairFlows:
         """Test API auth flow reauth success."""
         flow = ApiAuthenticationFailedRepairFlow()
         flow.hass = mock_hass
-        
-        with patch.object(mock_hass.config_entries, 'async_entries', return_value=[mock_config_entry]):
-            with patch.object(mock_hass, 'async_create_task') as mock_create_task:
+
+        with patch.object(
+            mock_hass.config_entries, "async_entries", return_value=[mock_config_entry]
+        ):
+            with patch.object(mock_hass, "async_create_task") as mock_create_task:
                 result = await flow.async_step_init({"confirm": True})
-                
+
                 assert result["type"] == "create_entry"
                 mock_create_task.assert_called_once()
 
@@ -80,9 +84,9 @@ class TestRepairFlows:
         """Test DeprecatedYamlConfigurationRepairFlow initialization."""
         flow = DeprecatedYamlConfigurationRepairFlow()
         flow.hass = mock_hass
-        
+
         result = await flow.async_step_init()
-        
+
         assert result["type"] == "form"
         assert result["step_id"] == "init"
         assert "description_placeholders" in result
@@ -94,39 +98,31 @@ class TestRepairFlowCreation:
     @pytest.mark.asyncio
     async def test_create_fix_flow_no_devices(self, hass: HomeAssistant):
         """Test creating fix flow for no devices issue."""
-        flow = await async_create_fix_flow(
-            hass, "no_devices_found", {}
-        )
-        
+        flow = await async_create_fix_flow(hass, "no_devices_found", {})
+
         assert isinstance(flow, NoDevicesFoundRepairFlow)
 
     @pytest.mark.asyncio
     async def test_create_fix_flow_api_auth(self, hass: HomeAssistant):
         """Test creating fix flow for API auth issue."""
-        flow = await async_create_fix_flow(
-            hass, "api_authentication_failed", {}
-        )
-        
+        flow = await async_create_fix_flow(hass, "api_authentication_failed", {})
+
         assert isinstance(flow, ApiAuthenticationFailedRepairFlow)
 
     @pytest.mark.asyncio
     async def test_create_fix_flow_deprecated_yaml(self, hass: HomeAssistant):
         """Test creating fix flow for deprecated yaml issue."""
-        flow = await async_create_fix_flow(
-            hass, "deprecated_yaml_configuration", {}
-        )
-        
+        flow = await async_create_fix_flow(hass, "deprecated_yaml_configuration", {})
+
         assert isinstance(flow, DeprecatedYamlConfigurationRepairFlow)
 
     @pytest.mark.asyncio
     async def test_create_fix_flow_unknown_issue(self, hass: HomeAssistant):
         """Test creating fix flow for unknown issue returns ConfirmRepairFlow."""
         from homeassistant.components.repairs import ConfirmRepairFlow
-        
-        flow = await async_create_fix_flow(
-            hass, "unknown_issue", {}
-        )
-        
+
+        flow = await async_create_fix_flow(hass, "unknown_issue", {})
+
         assert isinstance(flow, ConfirmRepairFlow)
 
 
@@ -153,12 +149,17 @@ class TestIssueCreation:
     @pytest.mark.asyncio
     async def test_create_issue_generic(self, hass: HomeAssistant, mock_config_entry):
         """Test generic issue creation."""
-        with patch("custom_components.loca.repairs.ir.async_create_issue") as mock_create_issue:
+        with patch(
+            "custom_components.loca.repairs.ir.async_create_issue"
+        ) as mock_create_issue:
             async_create_issue(
-                hass, "test_issue", "test_issue", 
-                {"account": "test@example.com"}, ir.IssueSeverity.ERROR
+                hass,
+                "test_issue",
+                "test_issue",
+                {"account": "test@example.com"},
+                ir.IssueSeverity.ERROR,
             )
-            
+
             mock_create_issue.assert_called_once_with(
                 hass,
                 DOMAIN,
@@ -166,19 +167,23 @@ class TestIssueCreation:
                 is_fixable=True,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key="test_issue",
-                translation_placeholders={"account": "test@example.com"}
+                translation_placeholders={"account": "test@example.com"},
             )
 
     @pytest.mark.asyncio
-    async def test_create_no_devices_issue(self, hass: HomeAssistant, mock_config_entry):
+    async def test_create_no_devices_issue(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
         """Test no devices issue creation."""
         with patch("custom_components.loca.repairs.async_create_issue") as mock_create:
             async_create_no_devices_issue(hass, mock_config_entry)
-            
+
             mock_create.assert_called_once_with(
-                hass, "no_devices_found", "no_devices_found",
+                hass,
+                "no_devices_found",
+                "no_devices_found",
                 translation_placeholders={"account": mock_config_entry.title},
-                severity=ir.IssueSeverity.WARNING
+                severity=ir.IssueSeverity.WARNING,
             )
 
     @pytest.mark.asyncio
@@ -186,13 +191,14 @@ class TestIssueCreation:
         """Test API auth issue creation."""
         with patch("custom_components.loca.repairs.async_create_issue") as mock_create:
             async_create_api_auth_issue(hass, mock_config_entry)
-            
-            mock_create.assert_called_once_with(
-                hass, "api_authentication_failed", "api_authentication_failed",
-                translation_placeholders={"account": mock_config_entry.title},
-                severity=ir.IssueSeverity.ERROR
-            )
 
+            mock_create.assert_called_once_with(
+                hass,
+                "api_authentication_failed",
+                "api_authentication_failed",
+                translation_placeholders={"account": mock_config_entry.title},
+                severity=ir.IssueSeverity.ERROR,
+            )
 
 
 class TestRepairErrorHandling:
@@ -203,9 +209,9 @@ class TestRepairErrorHandling:
         """Test that flows handle missing config entry gracefully."""
         flow = NoDevicesFoundRepairFlow()
         flow.hass = hass
-        
+
         result = await flow.async_step_init()
-        
+
         # Should still return a form, but may have different placeholders
         assert result["type"] == "form"
 
@@ -215,10 +221,12 @@ class TestRepairErrorHandling:
         mock_config_entry = MagicMock()
         mock_config_entry.entry_id = "test"
         mock_config_entry.data = {"username": "test"}
-        
-        with patch("custom_components.loca.repairs.ir.async_create_issue") as mock_create_issue:
+
+        with patch(
+            "custom_components.loca.repairs.ir.async_create_issue"
+        ) as mock_create_issue:
             mock_create_issue.side_effect = Exception("Registry error")
-            
+
             # Should raise exception since async_create_issue doesn't handle errors
             with pytest.raises(Exception, match="Registry error"):
                 async_create_issue(hass, "test", "test", {})
@@ -232,11 +240,9 @@ class TestRepairIntegration:
         """Test that repairs are triggered by coordinator errors."""
         # This would test the integration with coordinator.py
         # where repairs are actually triggered
-        pass
 
     @pytest.mark.asyncio
     async def test_repair_resolves_when_issue_fixed(self):
         """Test that repair issues are resolved when problem is fixed."""
         # This would test that issues are automatically deleted
         # when the underlying problem is resolved
-        pass

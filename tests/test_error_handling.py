@@ -1,11 +1,12 @@
 """Tests for error handling utilities."""
+
 from __future__ import annotations
 
 import logging
 from unittest.mock import MagicMock
 
-import pytest
 from aiohttp import ClientConnectorError, ServerTimeoutError
+import pytest
 
 from custom_components.loca.error_handling import (
     CONNECTION_ERROR_TYPES,
@@ -137,7 +138,9 @@ class TestLogConnectivityError:
         assert "timed out" in caplog.text
         assert "Will retry on next update cycle" in caplog.text
 
-    def test_log_generic_connectivity_error(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_generic_connectivity_error(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test logging of generic connectivity error."""
         logger = logging.getLogger("test")
         err = ConnectionError("Connection reset by peer")
@@ -150,7 +153,9 @@ class TestLogConnectivityError:
         assert "ConnectionError" in caplog.text
         assert "Will retry on next update cycle" in caplog.text
 
-    def test_log_truncates_long_messages(self, caplog: pytest.LogCaptureFixture) -> None:
+    def test_log_truncates_long_messages(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """Test that long error messages are truncated."""
         logger = logging.getLogger("test")
         long_message = "Error: " + "x" * 200

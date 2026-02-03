@@ -1,17 +1,27 @@
 """Type definitions for Loca integration."""
+
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, TypedDict, Protocol, Any
+from typing import Any, Literal, Protocol, TypedDict
 
 # Literal types for better type safety
 LocationSource = Literal["GPS", "Cell Tower"]
 AssetType = Literal[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
-SensorType = Literal["battery", "last_seen", "location_accuracy", "asset_info", "speed", "location_update", "location"]
+SensorType = Literal[
+    "battery",
+    "last_seen",
+    "location_accuracy",
+    "asset_info",
+    "speed",
+    "location_update",
+    "location",
+]
 
 
 class AssetInfo(TypedDict, total=False):
     """Type definition for asset information."""
+
     brand: str
     model: str
     serial: str
@@ -22,6 +32,7 @@ class AssetInfo(TypedDict, total=False):
 
 class AddressDetails(TypedDict, total=False):
     """Type definition for address details."""
+
     street: str
     number: str
     city: str
@@ -34,6 +45,7 @@ class AddressDetails(TypedDict, total=False):
 
 class LocationUpdate(TypedDict, total=False):
     """Type definition for location update configuration."""
+
     frequency: int
     always: int
     begin: int
@@ -43,6 +55,7 @@ class LocationUpdate(TypedDict, total=False):
 
 class DeviceData(TypedDict):
     """Type definition for device data."""
+
     device_id: str
     name: str
     latitude: float
@@ -64,6 +77,7 @@ class DeviceData(TypedDict):
 
 class APIResponse(Protocol):
     """Protocol for API response objects."""
+
     status: int
 
     async def json(self) -> dict[str, Any]:
@@ -77,6 +91,7 @@ class APIResponse(Protocol):
 
 class ConfigData(TypedDict):
     """Type definition for configuration data."""
+
     api_key: str
     username: str
     password: str
@@ -84,6 +99,7 @@ class ConfigData(TypedDict):
 
 class APICredentials(TypedDict):
     """Type definition for API credentials."""
+
     key: str
     username: str
     password: str
@@ -91,6 +107,7 @@ class APICredentials(TypedDict):
 
 class StatusEntry(TypedDict, total=False):
     """Type definition for status list entry."""
+
     Asset: dict[str, Any]
     History: dict[str, Any]
     Spot: dict[str, Any]
@@ -98,6 +115,7 @@ class StatusEntry(TypedDict, total=False):
 
 class LocationEntry(TypedDict, total=False):
     """Type definition for location list entry."""
+
     id: str | int
     label: str
     latitude: float | str
@@ -114,4 +132,5 @@ class LocationEntry(TypedDict, total=False):
 
 class ErrorResult(TypedDict):
     """Type definition for error results."""
+
     base: Literal["cannot_connect", "invalid_auth", "unknown"]

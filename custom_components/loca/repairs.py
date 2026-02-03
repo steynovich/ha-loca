@@ -1,4 +1,5 @@
 """Repairs for Loca integration."""
+
 from __future__ import annotations
 
 import logging
@@ -22,11 +23,11 @@ async def async_create_fix_flow(
     """Create flow."""
     if issue_id == "deprecated_yaml_configuration":
         return DeprecatedYamlConfigurationRepairFlow()
-    if issue_id == "api_authentication_failed": 
+    if issue_id == "api_authentication_failed":
         return ApiAuthenticationFailedRepairFlow()
     if issue_id == "no_devices_found":
         return NoDevicesFoundRepairFlow()
-    
+
     return ConfirmRepairFlow()
 
 
@@ -124,8 +125,10 @@ def async_create_api_auth_issue(hass: HomeAssistant, config_entry: ConfigEntry) 
     )
 
 
-def async_create_no_devices_issue(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-    """Create a no devices found issue.""" 
+def async_create_no_devices_issue(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
+    """Create a no devices found issue."""
     async_create_issue(
         hass,
         "no_devices_found",

@@ -4,6 +4,7 @@ This module provides diagnostic data for troubleshooting while ensuring
 sensitive information (API keys, passwords, exact coordinates) is properly
 masked or excluded for security and privacy protection.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -20,7 +21,7 @@ async def async_get_config_entry_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
     coordinator = config_entry.runtime_data
-    
+
     # Gather coordinator data (mask sensitive information)
     diagnostics_data: dict[str, Any] = {
         "config_entry": {
@@ -39,7 +40,9 @@ async def async_get_config_entry_diagnostics(
         },
         "coordinator": {
             "last_update_success": coordinator.last_update_success,
-            "last_exception": str(coordinator.last_exception) if coordinator.last_exception else None,
+            "last_exception": str(coordinator.last_exception)
+            if coordinator.last_exception
+            else None,
             "device_count": len(coordinator.data) if coordinator.data else 0,
         },
         "api_info": {
@@ -57,7 +60,7 @@ async def async_get_config_entry_diagnostics(
             "groups_cache_size": coordinator.api.groups_cache_size,
         },
     }
-    
+
     # Add device information (include all data for diagnostics)
     if coordinator.data:
         devices_info = []
@@ -67,17 +70,24 @@ async def async_get_config_entry_diagnostics(
                 "device_id": device_id,
                 "name": device_data.get("name", "Unknown"),
                 "battery_level": device_data.get("battery_level"),
-                "latitude": "**REDACTED**" if device_data.get("latitude") is not None else None,
-                "longitude": "**REDACTED**" if device_data.get("longitude") is not None else None,
-                "has_gps_data": device_data.get("latitude") is not None and device_data.get("longitude") is not None,
+                "latitude": "**REDACTED**"
+                if device_data.get("latitude") is not None
+                else None,
+                "longitude": "**REDACTED**"
+                if device_data.get("longitude") is not None
+                else None,
+                "has_gps_data": device_data.get("latitude") is not None
+                and device_data.get("longitude") is not None,
                 "gps_accuracy": device_data.get("gps_accuracy"),
-                "last_seen": device_data.get("last_seen").isoformat() if device_data.get("last_seen") else None,
+                "last_seen": device_data.get("last_seen").isoformat()
+                if device_data.get("last_seen")
+                else None,
                 "asset_info": device_data.get("asset_info"),
             }
             devices_info.append(device_info)
-        
+
         diagnostics_data["devices"] = devices_info
-    
+
     return diagnostics_data
 
 
@@ -86,32 +96,37 @@ async def async_get_device_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a device entry."""
     coordinator = config_entry.runtime_data
-    
+
     # Find the device ID from device identifiers
     device_id = None
     for identifier in device.identifiers:
         if identifier[0] == DOMAIN:
             device_id = identifier[1]
             break
-    
+
     if not coordinator or not coordinator.data:
         return {}
-    
+
     if not device_id or device_id not in coordinator.data:
         return {}
-    
+
     device_data = coordinator.data[device_id]
-    
+
     # Return device data with sensitive location information redacted
     return {
         "device_id": device_id,
         "name": device_data.get("name", "Unknown"),
         "battery_level": device_data.get("battery_level"),
         "latitude": "**REDACTED**" if device_data.get("latitude") is not None else None,
-        "longitude": "**REDACTED**" if device_data.get("longitude") is not None else None,
-        "has_gps_data": device_data.get("latitude") is not None and device_data.get("longitude") is not None,
+        "longitude": "**REDACTED**"
+        if device_data.get("longitude") is not None
+        else None,
+        "has_gps_data": device_data.get("latitude") is not None
+        and device_data.get("longitude") is not None,
         "gps_accuracy": device_data.get("gps_accuracy"),
-        "last_seen": device_data.get("last_seen").isoformat() if device_data.get("last_seen") else None,
+        "last_seen": device_data.get("last_seen").isoformat()
+        if device_data.get("last_seen")
+        else None,
         "asset_info": device_data.get("asset_info"),
         "address": "**REDACTED**" if device_data.get("address") else None,
         "speed": device_data.get("speed"),

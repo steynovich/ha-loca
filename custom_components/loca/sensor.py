@@ -1,4 +1,5 @@
 """Support for Loca device sensors."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -31,7 +32,7 @@ SENSOR_TYPES = {
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     "last_seen": SensorEntityDescription(
-        key="last_seen", 
+        key="last_seen",
         name="Last Seen",
         device_class=SensorDeviceClass.TIMESTAMP,
         icon="mdi:clock-outline",
@@ -39,7 +40,7 @@ SENSOR_TYPES = {
     ),
     "location_accuracy": SensorEntityDescription(
         key="location_accuracy",
-        name="Location Accuracy", 
+        name="Location Accuracy",
         native_unit_of_measurement="m",
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:crosshairs-gps",
@@ -69,7 +70,6 @@ SENSOR_TYPES = {
         key="location",
         name="Location",
         icon="mdi:home-map-marker",
-        # entity_category=EntityCategory.DIAGNOSTIC,
     ),
 }
 
@@ -81,14 +81,14 @@ async def async_setup_entry(
 ) -> None:
     """Set up Loca sensors from a config entry."""
     coordinator: LocaDataUpdateCoordinator = config_entry.runtime_data
-    
+
     entities = []
     for device_id in coordinator.data:
         for sensor_type in SENSOR_TYPES:
             entities.append(LocaSensor(coordinator, device_id, sensor_type))
-    
+
     async_add_entities(entities)
-    
+
     # Note: New devices added after setup will appear after integration reload.
     # This is a Home Assistant limitation for sensor entities.
 
@@ -112,7 +112,6 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
         self._attr_unique_id = f"{DOMAIN}_{device_id}_{sensor_type}"
         # Entity name is handled by entity_description
 
-
     @property
     def name(self) -> str | None:
         """Return the name of the sensor."""
@@ -126,48 +125,45 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
         """Return the state of the sensor."""
         if self._sensor_type == "battery":
             return self.device_data.get("battery_level")
-        elif self._sensor_type == "last_seen":
+        if self._sensor_type == "last_seen":
             # For timestamp device class, return the datetime object directly
             return self.device_data.get("last_seen")
-        elif self._sensor_type == "location_accuracy":
+        if self._sensor_type == "location_accuracy":
             return self.device_data.get("gps_accuracy")
-        elif self._sensor_type == "asset_info":
+        if self._sensor_type == "asset_info":
             # Return a summary string for the asset
             asset_info = self.device_data.get("asset_info", {})
             brand = asset_info.get("brand", "")
             model = asset_info.get("model", "")
             if brand and model:
                 return f"{brand} {model}"
-            elif brand:
+            if brand:
                 return brand
-            elif model:
+            if model:
                 return model
-            else:
-                return "Unknown Asset"
-        elif self._sensor_type == "speed":
+            return "Unknown Asset"
+        if self._sensor_type == "speed":
             return self.device_data.get("speed")
-        elif self._sensor_type == "location_update":
+        if self._sensor_type == "location_update":
             # Return a simple summary of the location update configuration
             location_update = self.device_data.get("location_update", {})
             if not location_update:
                 return "Not configured"
-            
+
             always = location_update.get("always", 0)
-            
+
             if always == 1:
                 return "Always on"
-            else:
-                return "Scheduled"
-        elif self._sensor_type == "location":
+            return "Scheduled"
+        if self._sensor_type == "location":
             # Return the formatted address as stored in device data
             # Use translation for unknown location when address is None or empty
             address = self.device_data.get("address")
             if address:
                 return address
-            else:
-                # Return fallback text for unknown location
-                return "Unknown location"
-        
+            # Return fallback text for unknown location
+            return "Unknown location"
+
         return None
 
     def _get_last_seen_attributes(self) -> dict[str, Any]:
@@ -182,13 +178,15 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
         attributes = {}
         asset_info = self.device_data.get("asset_info", {})
         if asset_info:
-            attributes.update({
-                "brand": asset_info.get("brand", "Unknown"),
-                "model": asset_info.get("model", "Unknown"),
-                "serial": asset_info.get("serial", "Unknown"),
-                "type": asset_info.get("type", "Unknown"),
-                "group_name": asset_info.get("group_name", "Unknown"),
-            })
+            attributes.update(
+                {
+                    "brand": asset_info.get("brand", "Unknown"),
+                    "model": asset_info.get("model", "Unknown"),
+                    "serial": asset_info.get("serial", "Unknown"),
+                    "type": asset_info.get("type", "Unknown"),
+                    "group_name": asset_info.get("group_name", "Unknown"),
+                }
+            )
 
         # Add additional device information
         for key, attr_name in [
@@ -222,8 +220,17 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
             else:
                 # Fallback: treat as seconds since midnight
                 timeofday = abs(timeofday) % TimeConstants.SECONDS_PER_DAY
-                hours = timeofday // TimeConstants.SECONDS_PER_HOUR if timeofday >= TimeConstants.SECONDS_PER_HOUR else 0
-                minutes = (timeofday % TimeConstants.SECONDS_PER_HOUR) // TimeConstants.SECONDS_PER_MINUTE if timeofday >= TimeConstants.SECONDS_PER_MINUTE else 0
+                hours = (
+                    timeofday // TimeConstants.SECONDS_PER_HOUR
+                    if timeofday >= TimeConstants.SECONDS_PER_HOUR
+                    else 0
+                )
+                minutes = (
+                    (timeofday % TimeConstants.SECONDS_PER_HOUR)
+                    // TimeConstants.SECONDS_PER_MINUTE
+                    if timeofday >= TimeConstants.SECONDS_PER_MINUTE
+                    else 0
+                )
 
             # Ensure valid time range using constants
             hours = min(TimeConstants.HOURS_PER_DAY - 1, max(0, hours))
@@ -245,21 +252,29 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
                 if formatted_time := self._format_time_of_day(timeofday):
                     attributes["update_time"] = formatted_time
 
-        attributes.update({
-            "frequency": location_update.get("frequency", 0),
-            "always_on": location_update.get("always", 0) == 1,
-            "begin_time": location_update.get("begin", 0),
-            "end_time": location_update.get("end", 0),
-        })
+        attributes.update(
+            {
+                "frequency": location_update.get("frequency", 0),
+                "always_on": location_update.get("always", 0) == 1,
+                "begin_time": location_update.get("begin", 0),
+                "end_time": location_update.get("end", 0),
+            }
+        )
 
         # Convert frequency to human readable format using constants
         frequency = location_update.get("frequency", 0)
         if frequency >= TimeConstants.SECONDS_PER_DAY:
-            attributes["frequency_description"] = f"{frequency // TimeConstants.SECONDS_PER_DAY} day(s)"
+            attributes["frequency_description"] = (
+                f"{frequency // TimeConstants.SECONDS_PER_DAY} day(s)"
+            )
         elif frequency >= TimeConstants.SECONDS_PER_HOUR:
-            attributes["frequency_description"] = f"{frequency // TimeConstants.SECONDS_PER_HOUR} hour(s)"
+            attributes["frequency_description"] = (
+                f"{frequency // TimeConstants.SECONDS_PER_HOUR} hour(s)"
+            )
         elif frequency >= TimeConstants.SECONDS_PER_MINUTE:
-            attributes["frequency_description"] = f"{frequency // TimeConstants.SECONDS_PER_MINUTE} minute(s)"
+            attributes["frequency_description"] = (
+                f"{frequency // TimeConstants.SECONDS_PER_MINUTE} minute(s)"
+            )
         else:
             attributes["frequency_description"] = f"{frequency} second(s)"
         return attributes
@@ -306,10 +321,9 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
             asset_info = self.device_data.get("asset_info", {})
             asset_type = asset_info.get("type", 0)
             return LOCA_ASSET_TYPE_ICONS.get(asset_type, "mdi:radar")
-        
+
         # For other sensors, use the default icon from entity description
         return self.entity_description.icon
-
 
     @property
     def available(self) -> bool:
