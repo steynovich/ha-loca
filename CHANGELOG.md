@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.6] - 2025-02-03
+
+### Project Improvements
+
+#### Maintenance Release
+- **Improved**: Project configuration and CI/CD pipeline enhancements
+- **Updated**: Documentation and development guidelines
+- **Fixed**: Minor code quality improvements
+- **Improved**: Test suite reliability and coverage
+
+#### Technical Details
+- Enhanced pytest configuration
+- Improved ruff linting configuration
+- Updated CI workflows for better reliability
+- Added comprehensive project documentation (CLAUDE.md)
+
+---
+
+## [1.1.5] - 2025-XX-XX
+
+### Bug Fixes
+
+#### AttributeError Fix (High Severity)
+- **Fixed**: `AttributeError: 'LocaDataUpdateCoordinator' object has no attribute 'last_update_success_time'`
+  - Corrected coordinator attribute access that was causing integration failures
+  - Fixed entity cache invalidation logic
+  - Resolved entity registration errors
+
+#### Technical Details
+- Modified Files:
+  - `custom_components/loca/coordinator.py` - Fixed attribute access
+  - `custom_components/loca/base.py` - Updated cache invalidation logic
+- All tests pass
+
+---
+
+## [1.1.4] - 2025-XX-XX
+
+### Improvements
+
+#### Entity Initialization
+- **Improved**: Entity initialization and setup process
+  - More robust entity registration
+  - Better error handling during entity creation
+  - Improved coordinator integration
+  - Enhanced entity state management
+
+#### Technical Details
+- Modified Files:
+  - `custom_components/loca/__init__.py` - Enhanced entity setup
+  - `custom_components/loca/base.py` - Improved initialization logic
+- All tests pass
+
+---
+
 ## [1.1.3] - 2025-11-27
 
 ### Improved Error Handling

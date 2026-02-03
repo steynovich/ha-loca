@@ -6,8 +6,6 @@
 
 A Home Assistant integration for tracking Loca GPS devices. This integration provides device tracking and sensor data for your Loca devices.
 
-> **Current Status**: v1.1.6 includes bug fixes and improvements.
-
 ## Features
 
 - **Device Tracking**: Track the location of your Loca GPS devices on the Home Assistant map
@@ -470,17 +468,8 @@ gh repo edit --add-topic home-assistant,hacs,integration,loca,device-tracker,gps
 
 ### Authentication Issues
 
-If you're experiencing authentication problems, especially after upgrading from v1.1.0:
+If you're experiencing authentication problems:
 
-#### Error: "name 'HTTPStatus' is not defined"
-- **Solution**: Update to v1.1.1-alpha.1 or later
-- **Cause**: Import conflict in v1.1.0 that has been fixed
-
-#### Error: "object has no attribute 'last_update_success_time'"
-- **Solution**: Update to v1.1.1-alpha.1 or later
-- **Cause**: Coordinator attribute error in v1.1.0 that has been fixed
-
-#### General Authentication Failures
 1. **Verify Credentials**: Double-check your API key, username, and password
 2. **Check API Status**: Ensure the Loca API is accessible
 3. **Restart Integration**:
@@ -491,7 +480,7 @@ If you're experiencing authentication problems, especially after upgrading from 
 
 #### Getting Help
 - Check the [GitHub Issues](https://github.com/steynovich/ha-loca/issues) page
-- Review [Release Notes](RELEASE_NOTES_v1.1.1-alpha.1.md) for known issues
+- Review [CHANGELOG.md](CHANGELOG.md) for known issues and fixes
 - Enable debug logging for detailed troubleshooting
 
 ### Debug Logging
