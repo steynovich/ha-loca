@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **ha-loca**, a production-ready Home Assistant custom integration for tracking Loca GPS devices. It provides comprehensive device tracking, sensor data, services, diagnostics, and repairs for Loca-branded GPS trackers through their cloud API.
 
-**Current Version**: 1.1.5
+**Current Version**: 1.1.6
 **Integration Type**: Cloud polling hub integration
 **HACS Compatible**: Yes (custom repository)
 
