@@ -6,7 +6,7 @@
         "description": "Voer uw Loca API-gegevens in om uw apparaten te verbinden met Home Assistant.",
         "data": {
           "api_key": "API key",
-          "username": "Gebruikersnaam", 
+          "username": "Gebruikersnaam",
           "password": "Wachtwoord"
         }
       },
@@ -15,7 +15,7 @@
         "description": "De Loca API-gegevens voor {username} moeten worden bijgewerkt. Voer uw huidige gegevens in.",
         "data": {
           "api_key": "API key",
-          "username": "Gebruikersnaam", 
+          "username": "Gebruikersnaam",
           "password": "Wachtwoord"
         }
       }
@@ -83,6 +83,24 @@
     "no_devices_found": {
       "title": "Geen apparaten gevonden",
       "description": "Er zijn geen apparaten gevonden voor het Loca-account {account}. Dit is normaal voor nieuwe accounts. Als u wel apparaten heeft, zorg er dan voor dat ze correct zijn geconfigureerd en actief zijn in uw Loca-account."
+    }
+  },
+  "services": {
+    "refresh_devices": {
+      "name": "Refresh devices",
+      "description": "Manually refresh device data from the Loca API."
+    },
+    "force_update": {
+      "name": "Force update",
+      "description": "Force an immediate update for a specific device."
+    }
+  },
+  "exceptions": {
+    "rate_limit_refresh": {
+      "message": "Rate limit: Please wait {seconds} more seconds before refreshing again"
+    },
+    "rate_limit_update": {
+      "message": "Rate limit: Please wait {seconds} more seconds before updating device again"
     }
   }
 }

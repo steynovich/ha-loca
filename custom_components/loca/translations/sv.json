@@ -6,7 +6,7 @@
         "description": "Ange dina Loca API-uppgifter för att ansluta dina enheter till Home Assistant.",
         "data": {
           "api_key": "API key",
-          "username": "Användarnamn", 
+          "username": "Användarnamn",
           "password": "Lösenord"
         }
       },
@@ -15,7 +15,7 @@
         "description": "Loca API-uppgifterna för {username} behöver uppdateras. Ange dina nuvarande uppgifter.",
         "data": {
           "api_key": "API key",
-          "username": "Användarnamn", 
+          "username": "Användarnamn",
           "password": "Lösenord"
         }
       }
@@ -83,6 +83,24 @@
     "no_devices_found": {
       "title": "Inga enheter hittades",
       "description": "Inga enheter hittades för Loca-kontot {account}. Detta är normalt för nya konton. Om du har enheter, se till att de är korrekt konfigurerade och aktiva i ditt Loca-konto."
+    }
+  },
+  "services": {
+    "refresh_devices": {
+      "name": "Refresh devices",
+      "description": "Manually refresh device data from the Loca API."
+    },
+    "force_update": {
+      "name": "Force update",
+      "description": "Force an immediate update for a specific device."
+    }
+  },
+  "exceptions": {
+    "rate_limit_refresh": {
+      "message": "Rate limit: Please wait {seconds} more seconds before refreshing again"
+    },
+    "rate_limit_update": {
+      "message": "Rate limit: Please wait {seconds} more seconds before updating device again"
     }
   }
 }

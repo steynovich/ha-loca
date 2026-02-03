@@ -41,6 +41,24 @@
       }
     }
   },
+  "services": {
+    "refresh_devices": {
+      "name": "Refresh devices",
+      "description": "Manually refresh device data from the Loca API."
+    },
+    "force_update": {
+      "name": "Force update",
+      "description": "Force an immediate update for a specific device."
+    }
+  },
+  "exceptions": {
+    "rate_limit_refresh": {
+      "message": "Rate limit: Please wait {seconds} more seconds before refreshing again"
+    },
+    "rate_limit_update": {
+      "message": "Rate limit: Please wait {seconds} more seconds before updating device again"
+    }
+  },
   "entity": {
     "sensor": {
       "battery": {

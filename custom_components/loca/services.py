@@ -61,7 +61,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                     ).total_seconds()
                     if time_since_last < SERVICE_RATE_LIMIT_SECONDS:
                         raise ServiceValidationError(
-                            f"Rate limit: Please wait {SERVICE_RATE_LIMIT_SECONDS - int(time_since_last)} more seconds before refreshing again"
+                            translation_domain=DOMAIN,
+                            translation_key="rate_limit_refresh",
+                            translation_placeholders={
+                                "seconds": str(
+                                    SERVICE_RATE_LIMIT_SECONDS - int(time_since_last)
+                                )
+                            },
                         )
 
             refreshed_count = 0
@@ -119,7 +125,13 @@ async def async_setup_services(hass: HomeAssistant) -> None:
                 ).total_seconds()
                 if time_since_last < SERVICE_RATE_LIMIT_SECONDS:
                     raise ServiceValidationError(
-                        f"Rate limit: Please wait {SERVICE_RATE_LIMIT_SECONDS - int(time_since_last)} more seconds before updating device again"
+                        translation_domain=DOMAIN,
+                        translation_key="rate_limit_update",
+                        translation_placeholders={
+                            "seconds": str(
+                                SERVICE_RATE_LIMIT_SECONDS - int(time_since_last)
+                            )
+                        },
                     )
 
             # Find the coordinator containing this device
