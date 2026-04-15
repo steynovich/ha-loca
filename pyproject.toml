@@ -1,9 +1,9 @@
 [project]
 name = "loca"
-version = "1.1.6"
+version = "2.0.0"
 description = "Home Assistant integration for Loca GPS device tracking"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 license = {text = "MIT"}
 authors = [
     {name = "steynovich", email = ""}
@@ -11,7 +11,7 @@ authors = [
 keywords = ["home-assistant", "loca", "gps-tracking", "device-tracker"]
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py314"
 line-length = 88
 
 # Exclude common directories
@@ -131,35 +131,28 @@ line-ending = "lf"
 skip-magic-trailing-comma = false
 
 [tool.mypy]
-python_version = "3.13"
+# Settings match what was previously in mypy.ini (the effective config).
+# Tightening these is a separate follow-up.
+python_version = "3.14"
 show_error_codes = true
-follow_imports = "normal"
-local_partial_types = true
-strict_equality = true
-no_implicit_optional = true
-warn_incomplete_stub = true
-warn_redundant_casts = true
+ignore_missing_imports = true
+warn_return_any = false
 warn_unused_configs = true
-warn_unused_ignores = true
-enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
-disable_error_code = ["attr-defined", "name-defined"]
-disallow_subclassing_any = true
-disallow_untyped_calls = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = false
-warn_return_any = true
-warn_unreachable = true
-strict_optional = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+check_untyped_defs = false
+explicit_package_bases = true
 
-# Ignore missing imports for external packages
+# Ignore missing imports for external packages that lack type stubs.
 [[tool.mypy.overrides]]
 module = [
     "aiohttp.*",
     "homeassistant.*",
     "voluptuous.*",
     "pytest.*",
+    "pytest_homeassistant_custom_component.*",
 ]
 ignore_missing_imports = true
 
@@ -171,13 +164,20 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 addopts = [
     "--strict-markers",
+    "--strict-config",
+    "-p",
+    "no:threadexception",
     "--cov=custom_components.loca",
     "--cov-report=term-missing",
     "--cov-report=xml",
 ]
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 markers = [
     "asyncio: mark test as async",
+    "unit: marks tests as unit tests",
+    "integration: marks tests as integration tests",
+    "skip_teardown_check: marks tests that have known teardown issues",
 ]
 
 [tool.coverage.run]

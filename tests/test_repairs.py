@@ -168,6 +168,7 @@ class TestIssueCreation:
                 severity=ir.IssueSeverity.ERROR,
                 translation_key="test_issue",
                 translation_placeholders={"account": "test@example.com"},
+                data=None,
             )
 
     @pytest.mark.asyncio
@@ -198,6 +199,7 @@ class TestIssueCreation:
                 "api_authentication_failed",
                 translation_placeholders={"account": mock_config_entry.title},
                 severity=ir.IssueSeverity.ERROR,
+                data={"entry_id": mock_config_entry.entry_id},
             )
 
 

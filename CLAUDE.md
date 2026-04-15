@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **ha-loca**, a production-ready Home Assistant custom integration for tracking Loca GPS devices. It provides comprehensive device tracking, sensor data, services, diagnostics, and repairs for Loca-branded GPS trackers through their cloud API.
 
-**Current Version**: 1.1.6
+**Current Version**: 2.0.0
 **Integration Type**: Cloud polling hub integration
 **HACS Compatible**: Yes (custom repository)
 
@@ -80,20 +80,20 @@ The integration follows Home Assistant's standard architecture patterns:
 ```
 ha-loca/
 ├── custom_components/loca/    # Main integration code
-│   ├── __init__.py            # Integration setup/teardown
-│   ├── api.py                 # LocaAPI client (317 lines)
-│   ├── base.py                # Base entity classes (78 lines)
-│   ├── config_flow.py         # Configuration flow (253 lines)
-│   ├── const.py               # Constants and mappings (147 lines)
-│   ├── coordinator.py         # Data update coordinator (133 lines)
-│   ├── device_tracker.py      # GPS device tracker platform (102 lines)
-│   ├── diagnostics.py         # Diagnostics support (116 lines)
-│   ├── error_handling.py      # Error handling utilities (116 lines)
-│   ├── repairs.py             # Repair issue management (76 lines)
-│   ├── sensor.py              # Sensor platform - 7 types (288 lines)
-│   ├── services.py            # Service implementations (113 lines)
-│   ├── types.py               # Type definitions (48 lines)
-│   ├── validation.py          # Input validation (95 lines)
+│   ├── __init__.py            # Integration setup/teardown (61 lines)
+│   ├── api.py                 # LocaAPI client (844 lines)
+│   ├── base.py                # Base entity classes (35 lines)
+│   ├── config_flow.py         # Configuration flow (233 lines)
+│   ├── const.py               # Constants and mappings (106 lines)
+│   ├── coordinator.py         # Data update coordinator (157 lines)
+│   ├── device_tracker.py      # GPS device tracker platform (101 lines)
+│   ├── diagnostics.py         # Diagnostics support (138 lines)
+│   ├── error_handling.py      # Error handling utilities (156 lines)
+│   ├── repairs.py             # Repair issue management (171 lines)
+│   ├── sensor.py              # Sensor platform - 7 types (331 lines)
+│   ├── services.py            # Service implementations (192 lines)
+│   ├── types.py               # Type definitions (136 lines)
+│   ├── validation.py          # Input validation (162 lines)
 │   ├── manifest.json          # Integration metadata
 │   ├── services.yaml          # Service definitions
 │   └── translations/          # Multi-language support (9 languages)
@@ -114,63 +114,68 @@ ha-loca/
 │   ├── test_validation.py     # Validation tests
 │   └── test_error_handling.py # Error handling tests
 ├── .github/workflows/         # CI/CD automation
-│   ├── test.yml               # Pytest + coverage
-│   ├── validate.yml           # HACS validation
-│   ├── claude-pr-assistant.yml # Claude PR reviews
-│   └── claude-code-review.yml  # Claude code reviews
+│   ├── ci.yml                 # Ruff, mypy, pytest (coverage)
+│   ├── hacs.yml               # HACS validation
+│   ├── hassfest.yml           # Home Assistant hassfest validation
+│   ├── publish.yml            # Release publishing
+│   ├── claude.yml             # Claude triggered by issue/PR comments
+│   ├── claude-code-review.yml # Claude code reviews on PR
+│   └── stale.yml              # Stale issue/PR housekeeping
 ├── assets/                    # Brand assets (icon.svg, logo.svg)
 ├── hacs.json                  # HACS configuration
 ├── requirements_test.txt      # Test dependencies
-├── pytest.ini                 # Pytest configuration
+├── pyproject.toml             # Project + pytest + mypy + ruff configuration
 └── validate_*.py              # HACS compliance scripts
 ```
 
 ## Development Setup
 
 ### Prerequisites
-- Python 3.11+ (Home Assistant requirement)
+- Python 3.14+ (Home Assistant requirement as of HA 2026.3.0)
+- [uv](https://docs.astral.sh/uv/) for dependency/venv management (CI still uses pip)
 - Home Assistant core development environment
 - Loca API credentials (API key, username, password)
 
 ### Install Dependencies
 ```bash
-# Test dependencies
-pip install -r requirements_test.txt
-
-# Includes: pytest, pytest-aiohttp, pytest-homeassistant-custom-component, aiohttp
+# Create a Python 3.14 venv and install test dependencies
+uv venv --python 3.14
+uv pip install -r requirements_test.txt
 ```
+
+The `requirements_test.txt` file pulls in pytest, pytest-homeassistant-custom-component,
+pytest-asyncio, pytest-cov, pytest-mock, pytest-xdist, mypy, ruff, and Home Assistant core.
 
 ### Running Tests
 ```bash
-# Run all tests
-pytest
+# Run all tests (pytest config lives in pyproject.toml)
+.venv/bin/pytest
 
-# Run with coverage
-pytest --cov=custom_components.loca --cov-report=html
+# Run with HTML coverage
+.venv/bin/pytest --cov-report=html
 
-# Run specific test file
-pytest tests/test_api.py
+# Run a specific test file
+.venv/bin/pytest tests/test_api.py
 
 # Verbose output
-pytest -v
-
-# Run with Home Assistant test fixtures
-pytest --homeassistant
+.venv/bin/pytest -v
 ```
 
 ### Code Quality Tools
 
-The project uses standard Python tooling:
+Ruff (lint + format) and mypy are the supported tools — both are configured in
+`pyproject.toml`:
 
 ```bash
-# Type checking (if mypy is configured)
-mypy custom_components/loca
+# Lint
+.venv/bin/ruff check custom_components/loca tests/
 
-# Linting (if ruff/flake8 is configured)
-ruff check custom_components/loca
+# Format check / apply
+.venv/bin/ruff format --check custom_components/loca tests/
+.venv/bin/ruff format custom_components/loca tests/
 
-# Formatting
-black custom_components/loca
+# Type check
+.venv/bin/mypy --explicit-package-bases custom_components/loca tests/
 ```
 
 ### Testing Strategy
@@ -296,10 +301,13 @@ HomeAssistantError
 ## GitHub Actions Workflows
 
 ### CI/CD Pipeline
-1. **test.yml** - Runs pytest suite on push/PR
-2. **validate.yml** - HACS compliance checks
-3. **claude-pr-assistant.yml** - Automated PR reviews by Claude
-4. **claude-code-review.yml** - Code quality analysis by Claude
+1. **ci.yml** - Ruff (lint + format), mypy, pytest with coverage
+2. **hacs.yml** - HACS compliance checks (manual dispatch)
+3. **hassfest.yml** - Home Assistant hassfest validation (manual dispatch)
+4. **publish.yml** - Release publishing (zip asset for HACS)
+5. **claude.yml** - Claude triggered by issue/PR comments
+6. **claude-code-review.yml** - Claude code reviews on PR
+7. **stale.yml** - Stale issue/PR housekeeping
 
 ### Release Process
 1. Update version in `manifest.json`
@@ -381,7 +389,8 @@ HomeAssistantError
 
 ## Version History
 
-- **1.1.6** (Current) - Maintenance release with project improvements
+- **2.0.0** (Current) - Python 3.14 / HA 2026.3.0+ required; options changes now reload automatically; 401 retry on data endpoints; repair flow targets the correct entry; dead code and config duplication cleaned up
+- **1.1.6** - Maintenance release with project improvements
 - **1.1.5** - Fixed AttributeError for last_update_success_time
 - **1.1.4** - Entity initialization improvements
 - **1.1.3** - Coordinator stability fixes

@@ -22,6 +22,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Store coordinator in runtime_data (modern approach)
     entry.runtime_data = coordinator
 
+    # Reload the entry whenever options change (e.g. scan_interval)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Set up services if not already registered (thread-safe check)
@@ -38,11 +41,13 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if coordinator:
             await coordinator.async_shutdown()
 
-        # Unload services if this is the last config entry being unloaded
+        # Unload services if this is the last config entry being unloaded.
+        # The entry being unloaded is still reported as "loaded" at this point,
+        # so <= 1 means we are the only remaining loaded entry.
         remaining_entries = [
-            entry
-            for entry in hass.config_entries.async_entries(DOMAIN)
-            if entry.state.value == "loaded"
+            e
+            for e in hass.config_entries.async_entries(DOMAIN)
+            if e.state.value == "loaded"
         ]
         if len(remaining_entries) <= 1:
             await async_unload_services(hass)

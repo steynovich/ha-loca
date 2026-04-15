@@ -95,45 +95,6 @@ def mock_api_data():
 
 
 @pytest.fixture
-def mock_status_list_data():
-    """Return mock StatusList API data."""
-    return [
-        {
-            "asset_id": "12345",
-            "asset_label": "Test Device",
-            "latitude": "52.3676",
-            "longitude": "4.9041",
-            "street": "Test Street",
-            "number": "42",
-            "city": "Amsterdam",
-            "zipcode": "1234AB",
-            "country": "Netherlands",
-            "gps_accuracy": "5",
-            "timestamp": "2022-01-01 00:00:00",
-            "speed": "65.5",
-            "satellites": "8",
-            "battery": "85",
-            "asset_info": {
-                "type": 1,
-                "brand": "BMW",
-                "model": "X3",
-                "serial": "ABC123",
-                "group": 248,
-            },
-        },
-        {
-            "asset_id": "67890",
-            "asset_label": "Second Device",
-            "latitude": "51.5074",
-            "longitude": "-0.1278",
-            "gps_accuracy": "10",
-            "timestamp": "2022-01-01 00:01:00",
-            "battery": "42",
-        },
-    ]
-
-
-@pytest.fixture
 def mock_empty_response():
     """Return mock empty API response."""
     return {
@@ -162,7 +123,7 @@ def mock_coordinator():
 
 
 @pytest.fixture
-def mock_coordinator_with_data(mock_status_list_data):
+def mock_coordinator_with_data():
     """Create a mock coordinator with data."""
     from datetime import datetime
 

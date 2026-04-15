@@ -236,7 +236,7 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
             hours = min(TimeConstants.HOURS_PER_DAY - 1, max(0, hours))
             minutes = min(TimeConstants.MINUTES_PER_HOUR - 1, max(0, minutes))
             return f"{hours:02d}:{minutes:02d}"
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return None
 
     def _get_location_update_attributes(self) -> dict[str, Any]:

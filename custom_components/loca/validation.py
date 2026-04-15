@@ -65,7 +65,7 @@ class DataValidator:
 
         try:
             level = int(float(battery_level))
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             _LOGGER.warning("Invalid battery level value: %s", battery_level)
             return None
 
@@ -82,7 +82,7 @@ class DataValidator:
                 else LocationConstants.DEFAULT_GPS_ACCURACY
             )
             return max(1, acc)  # Ensure positive accuracy
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             _LOGGER.warning("Invalid GPS accuracy value: %s", accuracy)
             return LocationConstants.DEFAULT_GPS_ACCURACY
 

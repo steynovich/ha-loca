@@ -4,11 +4,72 @@ All versions of the Loca Device Tracker integration for Home Assistant.
 
 ## Version History
 
-- [v1.1.1-alpha.1](#v111-alpha1---critical-authentication-fixes) - Current (Alpha)
-- [v1.0.3](#v103---security-update) - Latest Stable
+- [v2.0.0](#v200---python-314--ha-20263-baseline) - Current
+- [v1.1.1-alpha.1](#v111-alpha1---critical-authentication-fixes) (Alpha)
+- [v1.0.3](#v103---security-update)
 - [v1.0.2](#v102---critical-bug-fixes--security-improvements)
 - [v1.0.1](#v101---bug-fix-release)
 - [v1.0.0](#v100---initial-release)
+
+---
+
+# v2.0.0 - Python 3.14 / HA 2026.3 baseline
+
+**Release Date**: 2026-04-15
+
+## ⚠️ Breaking Changes
+
+- **Minimum Home Assistant version: 2026.3.0** (matches HA's switch to Python 3.14).
+  Installs on HA 2025.x / Python 3.13 are no longer supported.
+- **Minimum Python version: 3.14** for development and CI.
+
+## 🛠 Fixes
+
+- **Options changes now apply automatically.** The config-entry update listener
+  was defined but never registered, so `scan_interval` (and any future option)
+  had no effect without a manual reload. Now wired via
+  `entry.add_update_listener(async_reload_entry)`.
+- **Silent failure on session expiry is fixed.** Authenticated data-endpoint
+  calls (`Assets.json`, `StatusList.json`, `UserLocationList.json`,
+  `Groups.json`) now retry once after re-authenticating when the server
+  responds with HTTP 401/403, instead of returning empty data and leaving
+  `is_authenticated == True`.
+- **Repairs flow now targets the correct entry.** The auth-failed issue
+  carries `entry_id` through to the flow, so users with multiple Loca accounts
+  see the *right* account's reauth dialog.
+- **`validate_input` no longer mislabels programming errors as "cannot
+  connect".** Only `LocaAPIUnavailableError` is wrapped as `CannotConnect`;
+  unexpected exceptions propagate to the caller's `unknown` branch.
+
+## 🧹 Cleanup
+
+- Removed `aiohttp` from `manifest.json` requirements (HA core bundles it —
+  listing it violates HA integration rules).
+- Deleted stale `VERSION` file, duplicate root `services.yaml`, and
+  stand-alone `pytest.ini` / `mypy.ini`. All config now lives in
+  `pyproject.toml`.
+- Removed dead `"attributes"` payload (written every poll, never read),
+  unreachable `gps_accuracy` fallback, and an unused
+  `mock_status_list_data` fixture.
+- Fixed variable shadowing in `async_unload_entry`.
+- Fixed broken reference to the removed `parse_device_data` method in the
+  root `test_api.py` debug script.
+- Ruff/mypy/ruff-format now target Python 3.14; applied PEP 758
+  (parenthesis-free `except`) where appropriate.
+
+## 📦 Tooling
+
+- CI `DEFAULT_PYTHON` bumped to `3.14`.
+- `hacs.json` `render_readme` removed (deprecated by HACS).
+- Local dev workflow documented with `uv` (CI still uses pip).
+
+## Verification
+
+- `ruff check` + `ruff format --check` clean
+- `mypy --explicit-package-bases custom_components/loca tests/` — clean
+- `pytest` — 264 passed (added one test asserting unexpected exceptions
+  propagate through the config flow)
+- HACS validation scripts — all pass
 
 ---
 

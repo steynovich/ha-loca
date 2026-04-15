@@ -24,7 +24,10 @@ async def async_create_fix_flow(
     if issue_id == "deprecated_yaml_configuration":
         return DeprecatedYamlConfigurationRepairFlow()
     if issue_id == "api_authentication_failed":
-        return ApiAuthenticationFailedRepairFlow()
+        entry_id = (
+            str(data["entry_id"]) if data and data.get("entry_id") is not None else None
+        )
+        return ApiAuthenticationFailedRepairFlow(entry_id=entry_id)
     if issue_id == "no_devices_found":
         return NoDevicesFoundRepairFlow()
 
@@ -50,15 +53,32 @@ class DeprecatedYamlConfigurationRepairFlow(RepairsFlow):
 class ApiAuthenticationFailedRepairFlow(RepairsFlow):
     """Handler for API authentication failed issue."""
 
+    def __init__(self, entry_id: str | None = None) -> None:
+        """Initialize the flow with the config entry that needs reauth."""
+        super().__init__()
+        self._entry_id = entry_id
+
     async def async_step_init(
         self, user_input: dict[str, str] | None = None
     ) -> FlowResult:
         """Handle the initial step."""
         if user_input is not None:
-            # Trigger reauthentication flow
-            config_entries = self.hass.config_entries.async_entries(DOMAIN)
-            if config_entries:
-                config_entry = config_entries[0]  # Take first entry
+            # Trigger reauth for the specific config entry that failed.
+            config_entry: ConfigEntry | None = None
+            if self._entry_id is not None:
+                config_entry = self.hass.config_entries.async_get_entry(self._entry_id)
+
+            if config_entry is None:
+                # Fallback: find any Loca entry (older issues have no entry_id)
+                config_entries = self.hass.config_entries.async_entries(DOMAIN)
+                config_entry = config_entries[0] if config_entries else None
+                if config_entry is not None:
+                    _LOGGER.warning(
+                        "Auth repair issue had no entry_id; falling back to %s",
+                        config_entry.entry_id,
+                    )
+
+            if config_entry is not None:
                 self.hass.async_create_task(
                     self.hass.config_entries.flow.async_init(
                         DOMAIN,
@@ -96,6 +116,7 @@ def async_create_issue(
     translation_key: str,
     translation_placeholders: dict[str, str] | None = None,
     severity: ir.IssueSeverity = ir.IssueSeverity.WARNING,
+    data: dict[str, str | int | float | None] | None = None,
 ) -> None:
     """Create a repair issue."""
     ir.async_create_issue(
@@ -106,6 +127,7 @@ def async_create_issue(
         severity=severity,
         translation_key=translation_key,
         translation_placeholders=translation_placeholders,
+        data=data,
     )
 
 
@@ -115,13 +137,14 @@ def async_delete_issue(hass: HomeAssistant, issue_id: str) -> None:
 
 
 def async_create_api_auth_issue(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
-    """Create an API authentication issue."""
+    """Create an API authentication issue for a specific config entry."""
     async_create_issue(
         hass,
         "api_authentication_failed",
         "api_authentication_failed",
         translation_placeholders={"account": config_entry.title},
         severity=ir.IssueSeverity.ERROR,
+        data={"entry_id": config_entry.entry_id},
     )
 
 

@@ -104,13 +104,7 @@ async def test_api_directly():
             if assets:
                 print("First asset preview:")
                 print(json.dumps(assets[0], indent=2, default=str))
-                
-                # Test legacy device parsing (from Assets)
-                print("\nTesting legacy device data parsing from Assets:")
-                parsed = api.parse_device_data(assets[0])
-                print("Parsed device data from Assets:")
-                print(json.dumps(parsed, indent=2, default=str))
-            
+
             print("\n" + "="*60)
             print("MAIN DATA SOURCE: StatusList.json (Real-time GPS Data)")
             print("="*60)

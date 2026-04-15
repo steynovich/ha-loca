@@ -331,9 +331,11 @@ The integration includes a repairs system that automatically detects and suggest
 ```
 ha-loca/
 ├── .github/workflows/          # GitHub Actions CI/CD
-│   ├── test.yml               # Automated testing
-│   ├── validate.yml           # HACS validation
-│   └── release.yml            # Release automation
+│   ├── ci.yml                 # Ruff, mypy, pytest
+│   ├── hacs.yml               # HACS validation
+│   ├── hassfest.yml           # Home Assistant hassfest validation
+│   ├── publish.yml            # Release publishing
+│   └── stale.yml              # Stale issue/PR housekeeping
 ├── assets/                    # Brand assets
 │   ├── icon.svg              # Integration icon
 │   └── logo.svg              # Integration logo
@@ -365,32 +367,30 @@ ha-loca/
 │   ├── test_*.py             # Test modules for each component
 ├── hacs.json                 # HACS configuration
 ├── requirements_test.txt     # Test dependencies
-├── pytest.ini              # Pytest configuration
-└── validate_*.py           # HACS compliance validation scripts
+├── pyproject.toml            # Project + pytest + mypy + ruff configuration
+└── validate_*.py             # HACS compliance validation scripts
 ```
 
 ### Running Tests
 
 ```bash
-# Install test dependencies
-pip install -r requirements_test.txt
+# Create venv + install test dependencies (uv recommended)
+uv venv --python 3.14
+uv pip install -r requirements_test.txt
 
-# Run all tests
-pytest
+# Run all tests (config lives in pyproject.toml)
+.venv/bin/pytest
 
-# Run with coverage report
-pytest --cov=custom_components.loca --cov-report=html
+# Run with HTML coverage report
+.venv/bin/pytest --cov-report=html
 
 # Run specific test categories
-pytest tests/test_api.py          # API tests
-pytest tests/test_sensor.py       # Sensor tests
-pytest tests/test_config_flow.py  # Config flow tests
+.venv/bin/pytest tests/test_api.py          # API tests
+.venv/bin/pytest tests/test_sensor.py       # Sensor tests
+.venv/bin/pytest tests/test_config_flow.py  # Config flow tests
 
 # Run with verbose output
-pytest -v
-
-# Run integration tests only
-pytest -k "not unit"
+.venv/bin/pytest -v
 ```
 
 ### Test Coverage

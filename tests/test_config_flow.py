@@ -20,6 +20,7 @@ from custom_components.loca.config_flow import (
     validate_input,
 )
 from custom_components.loca.const import CONF_API_KEY, DOMAIN
+from custom_components.loca.error_handling import LocaAPIUnavailableError
 
 
 @pytest.fixture
@@ -224,11 +225,11 @@ class TestValidateInput:
         hass: HomeAssistant,
         user_input: dict[str, str],
     ) -> None:
-        """Test validation with authentication failure."""
+        """Test that API-unavailable errors during auth surface as CannotConnect."""
         with patch("custom_components.loca.config_flow.LocaAPI") as mock_api_class:
             mock_api = AsyncMock()
             mock_api_class.return_value = mock_api
-            mock_api.authenticate.side_effect = Exception("Auth failed")
+            mock_api.authenticate.side_effect = LocaAPIUnavailableError("Auth failed")
             mock_api.close = AsyncMock()
 
             with pytest.raises(CannotConnect):
@@ -276,17 +277,36 @@ class TestValidateInput:
         hass: HomeAssistant,
         user_input: dict[str, str],
     ) -> None:
-        """Test that API is closed even when exception occurs."""
+        """Test that API is closed even when API-unavailable errors occur."""
         with patch("custom_components.loca.config_flow.LocaAPI") as mock_api_class:
             mock_api = AsyncMock()
             mock_api_class.return_value = mock_api
             mock_api.authenticate.return_value = True
-            mock_api.get_assets.side_effect = Exception("Network error")
+            mock_api.get_assets.side_effect = LocaAPIUnavailableError("Network error")
             mock_api.close = AsyncMock()
 
             with pytest.raises(CannotConnect):
                 await validate_input(hass, user_input)
 
+            mock_api.close.assert_called_once()
+
+    async def test_validate_input_unexpected_exception_propagates(
+        self,
+        hass: HomeAssistant,
+        user_input: dict[str, str],
+    ) -> None:
+        """Test that unexpected exceptions propagate (caller maps to 'unknown')."""
+        with patch("custom_components.loca.config_flow.LocaAPI") as mock_api_class:
+            mock_api = AsyncMock()
+            mock_api_class.return_value = mock_api
+            mock_api.authenticate.return_value = True
+            mock_api.get_assets.side_effect = RuntimeError("programming bug")
+            mock_api.close = AsyncMock()
+
+            with pytest.raises(RuntimeError):
+                await validate_input(hass, user_input)
+
+            # The finally block must still close the API session.
             mock_api.close.assert_called_once()
 
 

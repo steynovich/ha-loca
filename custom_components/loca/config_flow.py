@@ -20,6 +20,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
 )
+from .error_handling import LocaAPIUnavailableError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -67,13 +68,16 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
             "Authentication validation failed for user: %s", data[CONF_USERNAME]
         )
         raise
-    except Exception as err:
-        _LOGGER.exception(
-            "Unexpected exception during validation for user '%s': %s",
+    except LocaAPIUnavailableError as err:
+        # Network/timeout errors mean we genuinely cannot connect right now.
+        _LOGGER.warning(
+            "Cannot reach Loca API during validation for user '%s': %s",
             data[CONF_USERNAME],
             err,
         )
         raise CannotConnect from err
+    # Any other unexpected exception propagates so the caller surfaces it as
+    # "unknown" instead of misleading the user with "cannot connect".
 
     finally:
         await api.close()
@@ -123,7 +127,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 _LOGGER.exception("Unexpected exception during reauthentication")
                 errors["base"] = "unknown"
 
@@ -171,7 +175,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors["base"] = "cannot_connect"
             except InvalidAuth:
                 errors["base"] = "invalid_auth"
-            except Exception:  # pylint: disable=broad-except
+            except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"
             else:

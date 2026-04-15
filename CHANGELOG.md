@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-15
+
+### Breaking Changes
+
+- **Minimum Home Assistant version raised to 2026.3.0** — matches Home Assistant's
+  switch to Python 3.14. Installs on HA 2025.x / Python 3.13 are no longer supported.
+- **Minimum Python version raised to 3.14** for development and CI.
+
+### Added
+
+- Options-flow changes (e.g. `scan_interval`) now take effect immediately; the
+  config entry is reloaded automatically via a registered update listener.
+- API client now retries once after re-authenticating when an authenticated
+  endpoint returns HTTP 401/403, preventing silent failures from server-side
+  session expiry.
+- Auth-failed repair issues now carry the originating `entry_id`; the repair
+  flow opens reauth for the correct config entry when multiple Loca accounts
+  are configured.
+
+### Changed
+
+- `validate_input` (config flow) only maps `LocaAPIUnavailableError` to
+  `CannotConnect`. Unexpected exceptions propagate and surface as `unknown`
+  rather than being mislabeled as a connection problem.
+- `hacs.json`: min HA version bumped to `2026.3.0`; deprecated `render_readme`
+  removed.
+- `manifest.json`: `aiohttp` removed from `requirements` (HA core bundles it).
+- Project and CI tooling (ruff, mypy, pyproject target) now target Python 3.14.
+  Ruff applied PEP 758 (parenthesis-free `except`) where appropriate.
+- Consolidated configuration: deleted stand-alone `pytest.ini`, `mypy.ini`, and
+  the duplicate root `services.yaml`. All pytest/mypy/ruff settings now live in
+  `pyproject.toml`.
+- Fallback `ClientTimeout` uses the `API_TIMEOUT` constant instead of a
+  hardcoded `30`.
+
+### Removed
+
+- Stale `VERSION` file (not consumed anywhere; source of truth is
+  `manifest.json`).
+- Duplicate top-level `services.yaml`.
+- Dead `"attributes"` payload from parsed device data — it was written every
+  poll cycle but never read.
+- Unreachable `gps_accuracy` fallback in `parse_status_as_device`.
+- Unused `mock_status_list_data` test fixture whose shape didn't match the real
+  API response.
+
+### Fixed
+
+- Variable-shadowing in `async_unload_entry` (comprehension loop var shadowed
+  the function parameter).
+- Removed outdated `# pylint: disable=broad-except` comments — the project
+  uses ruff.
+- Broken reference to the removed `parse_device_data` method in the root
+  `test_api.py` debug script.
+
 ## [1.1.6] - 2025-02-03
 
 ### Project Improvements
