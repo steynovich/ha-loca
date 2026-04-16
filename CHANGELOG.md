@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-16
+
+### Added
+
+- **HA Integration Quality Scale: Platinum** — all 52 rules now pass.
+- Dynamic device discovery — new devices appear automatically without restarting.
+- Stale device cleanup — `async_remove_config_entry_device` allows removal of
+  devices no longer present in the API.
+- `icons.json` — icon translations for all entities and services.
+- `quality_scale.yaml` — documents compliance with every Quality Scale rule.
+- `PARALLEL_UPDATES = 0` on both platform modules.
+- 137 new tests (264 → 401); coverage raised from 81% to 98%.
+- Use-case section and two extra automation examples in README.
+
+### Changed
+
+- **Strict typing enabled** — `disallow_untyped_defs = true` in mypy for
+  integration code; test files exempted.
+- Ruff now enforces **C901 McCabe complexity** (`max-complexity = 10`).
+  All functions brought under the threshold:
+  - `coordinator._async_update_data`: D(18) → B(6)
+  - `services.async_setup_services`: C(23) → B(8) (now `_LocaServices` class)
+  - `sensor.native_value`: C(14) → A(2) (dispatch table)
+  - `api._post_and_retry_on_401`: C(11) → B(7)
+  - `api.get_assets / get_user_locations / get_status_list`: unified via
+    `_extract_list_from_response`
+- ty configured (`python-version = "3.14"`, `python = ".venv"`) so PEP 758
+  unparenthesised `except` syntax and HA imports resolve correctly.
+- CLAUDE.md and README.md updated to reflect all structural changes.
+
 ## [2.0.0] - 2026-04-15
 
 ### Breaking Changes
