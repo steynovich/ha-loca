@@ -17,6 +17,8 @@ from .coordinator import LocaDataUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
+PARALLEL_UPDATES = 0
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -26,14 +28,22 @@ async def async_setup_entry(
     """Set up Loca device tracker from a config entry."""
     coordinator: LocaDataUpdateCoordinator = config_entry.runtime_data
 
-    entities = []
-    for device_id in coordinator.data:
-        entities.append(LocaDeviceTracker(coordinator, device_id))
+    known_device_ids: set[str] = set(coordinator.data)
+    async_add_entities(
+        [LocaDeviceTracker(coordinator, device_id) for device_id in known_device_ids]
+    )
 
-    async_add_entities(entities)
+    def _async_add_new_devices() -> None:
+        """Create entities for devices discovered after initial setup."""
+        new_ids = set(coordinator.data) - known_device_ids
+        if not new_ids:
+            return
+        known_device_ids.update(new_ids)
+        async_add_entities(
+            [LocaDeviceTracker(coordinator, device_id) for device_id in new_ids]
+        )
 
-    # Note: New devices added after setup will appear after integration reload.
-    # This is a Home Assistant limitation for device tracker entities.
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_new_devices))
 
 
 class LocaDeviceTracker(LocaEntityMixin, CoordinatorEntity, TrackerEntity):

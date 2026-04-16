@@ -21,6 +21,8 @@ from .base import LocaEntityMixin
 from .const import DOMAIN, LOCA_ASSET_TYPE_ICONS, TimeConstants
 from .coordinator import LocaDataUpdateCoordinator
 
+PARALLEL_UPDATES = 0
+
 SENSOR_TYPES = {
     "battery": SensorEntityDescription(
         key="battery",
@@ -82,15 +84,30 @@ async def async_setup_entry(
     """Set up Loca sensors from a config entry."""
     coordinator: LocaDataUpdateCoordinator = config_entry.runtime_data
 
-    entities = []
-    for device_id in coordinator.data:
-        for sensor_type in SENSOR_TYPES:
-            entities.append(LocaSensor(coordinator, device_id, sensor_type))
+    known_device_ids: set[str] = set(coordinator.data)
+    async_add_entities(
+        [
+            LocaSensor(coordinator, device_id, sensor_type)
+            for device_id in known_device_ids
+            for sensor_type in SENSOR_TYPES
+        ]
+    )
 
-    async_add_entities(entities)
+    def _async_add_new_devices() -> None:
+        """Create sensor entities for devices discovered after initial setup."""
+        new_ids = set(coordinator.data) - known_device_ids
+        if not new_ids:
+            return
+        known_device_ids.update(new_ids)
+        async_add_entities(
+            [
+                LocaSensor(coordinator, device_id, sensor_type)
+                for device_id in new_ids
+                for sensor_type in SENSOR_TYPES
+            ]
+        )
 
-    # Note: New devices added after setup will appear after integration reload.
-    # This is a Home Assistant limitation for sensor entities.
+    config_entry.async_on_unload(coordinator.async_add_listener(_async_add_new_devices))
 
 
 class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
@@ -123,48 +140,28 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         """Return the state of the sensor."""
-        if self._sensor_type == "battery":
-            return self.device_data.get("battery_level")
-        if self._sensor_type == "last_seen":
-            # For timestamp device class, return the datetime object directly
-            return self.device_data.get("last_seen")
-        if self._sensor_type == "location_accuracy":
-            return self.device_data.get("gps_accuracy")
-        if self._sensor_type == "asset_info":
-            # Return a summary string for the asset
-            asset_info = self.device_data.get("asset_info", {})
-            brand = asset_info.get("brand", "")
-            model = asset_info.get("model", "")
-            if brand and model:
-                return f"{brand} {model}"
-            if brand:
-                return brand
-            if model:
-                return model
-            return "Unknown Asset"
-        if self._sensor_type == "speed":
-            return self.device_data.get("speed")
-        if self._sensor_type == "location_update":
-            # Return a simple summary of the location update configuration
-            location_update = self.device_data.get("location_update", {})
-            if not location_update:
-                return "Not configured"
+        resolver = _NATIVE_VALUE_RESOLVERS.get(self._sensor_type)
+        return resolver(self) if resolver else None
 
-            always = location_update.get("always", 0)
+    def _native_value_asset_info(self) -> str:
+        """Compose a brand/model summary for the asset_info sensor."""
+        asset_info = self.device_data.get("asset_info", {})
+        brand = asset_info.get("brand", "")
+        model = asset_info.get("model", "")
+        if brand and model:
+            return f"{brand} {model}"
+        return brand or model or "Unknown Asset"
 
-            if always == 1:
-                return "Always on"
-            return "Scheduled"
-        if self._sensor_type == "location":
-            # Return the formatted address as stored in device data
-            # Use translation for unknown location when address is None or empty
-            address = self.device_data.get("address")
-            if address:
-                return address
-            # Return fallback text for unknown location
-            return "Unknown location"
+    def _native_value_location_update(self) -> str:
+        """Summarise location-update configuration."""
+        location_update = self.device_data.get("location_update", {})
+        if not location_update:
+            return "Not configured"
+        return "Always on" if location_update.get("always", 0) == 1 else "Scheduled"
 
-        return None
+    def _native_value_location(self) -> str:
+        """Return the formatted address or the unknown-location fallback."""
+        return self.device_data.get("address") or "Unknown location"
 
     def _get_last_seen_attributes(self) -> dict[str, Any]:
         """Get attributes for last_seen sensor."""
@@ -329,3 +326,17 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
     def available(self) -> bool:
         """Return if entity is available."""
         return super().available and self._device_id in self.coordinator.data
+
+
+# Dispatch table mapping sensor_type → resolver returning the entity's native_value.
+# Simple lookups use `dict.get`; sensor types with composition logic delegate to
+# dedicated `_native_value_*` methods on the entity.
+_NATIVE_VALUE_RESOLVERS: dict[str, Any] = {
+    "battery": lambda self: self.device_data.get("battery_level"),
+    "last_seen": lambda self: self.device_data.get("last_seen"),
+    "location_accuracy": lambda self: self.device_data.get("gps_accuracy"),
+    "speed": lambda self: self.device_data.get("speed"),
+    "asset_info": LocaSensor._native_value_asset_info,
+    "location_update": LocaSensor._native_value_location_update,
+    "location": LocaSensor._native_value_location,
+}

@@ -195,6 +195,274 @@ class TestSanitizeForLogging:
         assert result == "***2 chars***"
 
 
+class TestHandleApiErrors:
+    """Test handle_api_errors decorator."""
+
+    @pytest.mark.asyncio
+    async def test_successful_call(self) -> None:
+        """Test that successful calls return the expected value."""
+        from custom_components.loca.error_handling import handle_api_errors
+
+        @handle_api_errors(default_return=[], log_prefix="Test op")
+        async def my_func() -> list[str]:
+            return ["result"]
+
+        result = await my_func()
+        assert result == ["result"]
+
+    @pytest.mark.asyncio
+    async def test_exception_returns_default(self) -> None:
+        """Test that exceptions return the default value."""
+        from custom_components.loca.error_handling import handle_api_errors
+
+        @handle_api_errors(default_return=[], log_prefix="Test op")
+        async def my_func() -> list[str]:
+            raise ValueError("boom")
+
+        result = await my_func()
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_exception_returns_none_default(self) -> None:
+        """Test that exceptions return None when no default specified."""
+        from custom_components.loca.error_handling import handle_api_errors
+
+        @handle_api_errors()
+        async def my_func() -> str:
+            raise RuntimeError("fail")
+
+        result = await my_func()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_exception_logs_error(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Test that exceptions are logged."""
+        from custom_components.loca.error_handling import handle_api_errors
+
+        @handle_api_errors(log_prefix="My operation")
+        async def my_func() -> str:
+            raise ValueError("test error message")
+
+        with caplog.at_level(logging.ERROR):
+            await my_func()
+
+        assert "My operation failed" in caplog.text
+
+
+class TestHandleConfigFlowErrors:
+    """Test handle_config_flow_errors decorator."""
+
+    @pytest.mark.asyncio
+    async def test_successful_call_with_input(self) -> None:
+        """Test successful call with user input."""
+        from custom_components.loca.error_handling import handle_config_flow_errors
+
+        class FakeFlow:
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+            _current_step = "user"
+            _schema: dict[str, str] = {}
+
+            def async_show_form(self, **kwargs):
+                return {"type": "form", **kwargs}
+
+        flow = FakeFlow()
+
+        @handle_config_flow_errors
+        async def step(self, user_input=None):
+            return {"type": "create_entry", "data": user_input}
+
+        result = await step(flow, {"key": "value"})
+        assert result["type"] == "create_entry"
+        assert result["data"] == {"key": "value"}
+
+    @pytest.mark.asyncio
+    async def test_cannot_connect_error(self) -> None:
+        """Test handling of CannotConnect error."""
+        from custom_components.loca.error_handling import handle_config_flow_errors
+
+        class FakeFlow:
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+            _current_step = "user"
+            _schema: dict[str, str] = {}
+
+            def async_show_form(self, **kwargs):
+                return {"type": "form", **kwargs}
+
+        flow = FakeFlow()
+
+        @handle_config_flow_errors
+        async def step(self, user_input=None):
+            raise self.__class__.CannotConnect()
+
+        result = await step(flow, {"key": "value"})
+        assert result["type"] == "form"
+        assert result["errors"] == {"base": "cannot_connect"}
+
+    @pytest.mark.asyncio
+    async def test_invalid_auth_error(self) -> None:
+        """Test handling of InvalidAuth error."""
+        from custom_components.loca.error_handling import handle_config_flow_errors
+
+        class FakeFlow:
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+            _current_step = "user"
+            _schema: dict[str, str] = {}
+
+            def async_show_form(self, **kwargs):
+                return {"type": "form", **kwargs}
+
+        flow = FakeFlow()
+
+        @handle_config_flow_errors
+        async def step(self, user_input=None):
+            raise self.__class__.InvalidAuth()
+
+        result = await step(flow, {"key": "value"})
+        assert result["type"] == "form"
+        assert result["errors"] == {"base": "invalid_auth"}
+
+    @pytest.mark.asyncio
+    async def test_unknown_error(self) -> None:
+        """Test handling of unknown error."""
+        from custom_components.loca.error_handling import handle_config_flow_errors
+
+        class FakeFlow:
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+            _current_step = "user"
+            _schema: dict[str, str] = {}
+
+            def async_show_form(self, **kwargs):
+                return {"type": "form", **kwargs}
+
+        flow = FakeFlow()
+
+        @handle_config_flow_errors
+        async def step(self, user_input=None):
+            raise RuntimeError("unexpected")
+
+        result = await step(flow, {"key": "value"})
+        assert result["type"] == "form"
+        assert result["errors"] == {"base": "unknown"}
+
+    @pytest.mark.asyncio
+    async def test_no_user_input(self) -> None:
+        """Test call with no user input passes through."""
+        from custom_components.loca.error_handling import handle_config_flow_errors
+
+        class FakeFlow:
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+        flow = FakeFlow()
+
+        @handle_config_flow_errors
+        async def step(self, user_input=None):
+            return {"type": "form", "step_id": "user"}
+
+        result = await step(flow, None)
+        assert result["type"] == "form"
+        assert result["step_id"] == "user"
+
+
+class TestConfigFlowErrorMixin:
+    """Test ConfigFlowErrorMixin class."""
+
+    def test_handle_validation_errors_success(self) -> None:
+        """Test successful validation."""
+        from custom_components.loca.error_handling import ConfigFlowErrorMixin
+
+        class FakeFlow(ConfigFlowErrorMixin):
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+        flow = FakeFlow()
+        result = flow.handle_validation_errors(lambda x: x, {"key": "value"})
+        assert result == {"key": "value"}
+
+    def test_handle_validation_errors_cannot_connect(self) -> None:
+        """Test CannotConnect exception in validation."""
+        from custom_components.loca.error_handling import ConfigFlowErrorMixin
+
+        class FakeFlow(ConfigFlowErrorMixin):
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+        flow = FakeFlow()
+
+        def failing_func(x):
+            raise FakeFlow.CannotConnect()
+
+        result = flow.handle_validation_errors(failing_func, {})
+        assert result == {"base": "cannot_connect"}
+
+    def test_handle_validation_errors_invalid_auth(self) -> None:
+        """Test InvalidAuth exception in validation."""
+        from custom_components.loca.error_handling import ConfigFlowErrorMixin
+
+        class FakeFlow(ConfigFlowErrorMixin):
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+        flow = FakeFlow()
+
+        def failing_func(x):
+            raise FakeFlow.InvalidAuth()
+
+        result = flow.handle_validation_errors(failing_func, {})
+        assert result == {"base": "invalid_auth"}
+
+    def test_handle_validation_errors_unknown(self) -> None:
+        """Test unknown exception in validation."""
+        from custom_components.loca.error_handling import ConfigFlowErrorMixin
+
+        class FakeFlow(ConfigFlowErrorMixin):
+            class CannotConnect(Exception):
+                pass
+
+            class InvalidAuth(Exception):
+                pass
+
+        flow = FakeFlow()
+
+        def failing_func(x):
+            raise RuntimeError("unexpected")
+
+        result = flow.handle_validation_errors(failing_func, {})
+        assert result == {"base": "unknown"}
+
+
 class TestConnectionErrorTypes:
     """Test CONNECTION_ERROR_TYPES constant."""
 

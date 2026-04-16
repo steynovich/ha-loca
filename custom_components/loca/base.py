@@ -12,7 +12,7 @@ from .const import DOMAIN
 class LocaEntityMixin:
     """Mixin class providing common functionality for Loca entities."""
 
-    def __init__(self, coordinator, device_id: str) -> None:
+    def __init__(self, coordinator: Any, device_id: str) -> None:
         """Initialize the mixin."""
         self.coordinator = coordinator
         self._device_id = device_id

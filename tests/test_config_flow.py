@@ -310,6 +310,188 @@ class TestValidateInput:
             mock_api.close.assert_called_once()
 
 
+class TestReauthFlow:
+    """Test the reauth flow."""
+
+    async def _start_reauth_flow(
+        self, hass: HomeAssistant, entry: MockConfigEntry
+    ) -> dict:  # type: ignore[type-arg]
+        """Start a reauth flow for the given entry."""
+        return await hass.config_entries.flow.async_init(  # type: ignore[return-value]
+            DOMAIN,
+            context={
+                "source": config_entries.SOURCE_REAUTH,
+                "entry_id": entry.entry_id,
+            },
+            data=entry.data,
+        )
+
+    async def test_reauth_step_shows_form(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Test reauth step shows form with pre-filled data."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="test_user",
+            data={
+                CONF_API_KEY: "old_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "old_pass",
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await self._start_reauth_flow(hass, entry)
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reauth_confirm"
+
+    async def test_reauth_success(
+        self,
+        hass: HomeAssistant,
+        expected_lingering_tasks,
+    ) -> None:
+        """Test successful reauthentication."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="test_user",
+            data={
+                CONF_API_KEY: "old_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "old_pass",
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await self._start_reauth_flow(hass, entry)
+
+        with (
+            patch(
+                "custom_components.loca.config_flow.validate_input",
+                return_value={"title": "Loca (test_user)"},
+            ),
+            patch(
+                "custom_components.loca.async_setup_entry",
+                return_value=True,
+            ),
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+            await hass.async_block_till_done()
+
+        assert result2["type"] is FlowResultType.ABORT
+        assert result2["reason"] == "reauth_successful"
+
+    async def test_reauth_cannot_connect(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Test reauthentication with cannot connect error."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="test_user",
+            data={
+                CONF_API_KEY: "old_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "old_pass",
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await self._start_reauth_flow(hass, entry)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            side_effect=CannotConnect,
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.FORM
+        assert result2["errors"] == {"base": "cannot_connect"}
+
+    async def test_reauth_invalid_auth(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Test reauthentication with invalid auth error."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="test_user",
+            data={
+                CONF_API_KEY: "old_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "old_pass",
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await self._start_reauth_flow(hass, entry)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            side_effect=InvalidAuth,
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.FORM
+        assert result2["errors"] == {"base": "invalid_auth"}
+
+    async def test_reauth_unknown_error(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Test reauthentication with unknown error."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="test_user",
+            data={
+                CONF_API_KEY: "old_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "old_pass",
+            },
+        )
+        entry.add_to_hass(hass)
+
+        result = await self._start_reauth_flow(hass, entry)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            side_effect=Exception("unexpected"),
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.FORM
+        assert result2["errors"] == {"base": "unknown"}
+
+
 class TestConfigFlowOptions:
     """Test config flow options."""
 
@@ -336,3 +518,31 @@ class TestConfigFlowOptions:
         # The options flow should show a form
         assert result["type"] is FlowResultType.FORM
         assert result["step_id"] == "init"
+
+    async def test_options_flow_submit(
+        self,
+        hass: HomeAssistant,
+        expected_lingering_tasks,
+    ) -> None:
+        """Test options flow submission creates entry with new options."""
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            unique_id="test_user",
+            data={
+                CONF_API_KEY: "test_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "test_pass",
+            },
+        )
+        entry.add_to_hass(hass)
+
+        with patch("custom_components.loca.async_setup_entry", return_value=True):
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+
+            result2 = await hass.config_entries.options.async_configure(
+                result["flow_id"],
+                user_input={"scan_interval": 120},
+            )
+
+        assert result2["type"] is FlowResultType.CREATE_ENTRY
+        assert result2["data"] == {"scan_interval": 120}

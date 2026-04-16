@@ -51,6 +51,7 @@ select = [
     "ERA",  # eradicate (commented code)
     "PL",   # Pylint
     "RUF",  # Ruff-specific rules
+    "C901", # McCabe complexity (paired with mccabe max-complexity below)
 ]
 
 # Ignore only essential rules that conflict with Home Assistant patterns
@@ -120,6 +121,10 @@ max-branches = 15
 max-returns = 8
 max-statements = 60
 
+[tool.ruff.lint.mccabe]
+# Ratchet: keeps new functions simple. Raise deliberately if a case justifies it.
+max-complexity = 10
+
 [tool.ruff.format]
 # Use double quotes for strings
 quote-style = "double"
@@ -129,6 +134,12 @@ indent-style = "space"
 line-ending = "lf"
 # Magic trailing comma
 skip-magic-trailing-comma = false
+
+[tool.ty.environment]
+# Pin ty's Python version so PEP 758 (unparenthesized `except E1, E2:`) is
+# accepted and homeassistant imports resolve from the project venv.
+python-version = "3.14"
+python = ".venv"
 
 [tool.mypy]
 # Settings match what was previously in mypy.ini (the effective config).
@@ -140,9 +151,9 @@ warn_return_any = false
 warn_unused_configs = true
 warn_unused_ignores = false
 warn_redundant_casts = true
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
-check_untyped_defs = false
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
 explicit_package_bases = true
 
 # Ignore missing imports for external packages that lack type stubs.
@@ -155,6 +166,11 @@ module = [
     "pytest_homeassistant_custom_component.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

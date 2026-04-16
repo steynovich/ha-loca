@@ -82,16 +82,22 @@ def log_connectivity_error(
 
 
 T = TypeVar("T")
+P = TypeVar("P")
 
 
-def handle_api_errors(default_return: Any = None, log_prefix: str = "API operation"):
+def handle_api_errors(
+    default_return: Any = None, log_prefix: str = "API operation"
+) -> Callable[
+    [Callable[..., Awaitable[T]]],
+    Callable[..., Awaitable[T | Any]],
+]:
     """Decorator for consistent API error handling."""
 
     def decorator(
         func: Callable[..., Awaitable[T]],
     ) -> Callable[..., Awaitable[T | Any]]:
         @wraps(func)
-        async def wrapper(*args, **kwargs) -> T | Any:
+        async def wrapper(*args: Any, **kwargs: Any) -> T | Any:
             try:
                 return await func(*args, **kwargs)
             except Exception as err:
@@ -103,12 +109,14 @@ def handle_api_errors(default_return: Any = None, log_prefix: str = "API operati
     return decorator
 
 
-def handle_config_flow_errors(func: Callable[..., T]) -> Callable[..., T]:
+def handle_config_flow_errors(
+    func: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[Any]]:
     """Decorator for consistent config flow error handling."""
 
     @wraps(func)
-    async def wrapper(self, user_input=None):
-        errors = {}
+    async def wrapper(self: Any, user_input: dict[str, Any] | None = None) -> Any:
+        errors: dict[str, str] = {}
         if user_input is not None:
             try:
                 return await func(self, user_input)
@@ -143,7 +151,14 @@ def sanitize_for_logging(value: str | None, show_length: bool = True) -> str:
 class ConfigFlowErrorMixin:
     """Mixin to provide standardized config flow error handling."""
 
-    def handle_validation_errors(self, validation_func, user_input):
+    CannotConnect: type[Exception]
+    InvalidAuth: type[Exception]
+
+    def handle_validation_errors(
+        self,
+        validation_func: Callable[[dict[str, Any]], Any],
+        user_input: dict[str, Any],
+    ) -> dict[str, str] | Any:
         """Handle validation with standardized error mapping."""
         try:
             return validation_func(user_input)

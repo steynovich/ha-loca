@@ -74,7 +74,7 @@ class TestRepairFlows:
             mock_hass.config_entries, "async_entries", return_value=[mock_config_entry]
         ):
             with patch.object(mock_hass, "async_create_task") as mock_create_task:
-                result = await flow.async_step_init({"confirm": True})
+                result = await flow.async_step_init({"confirm": "true"})
 
                 assert result["type"] == "create_entry"
                 mock_create_task.assert_called_once()

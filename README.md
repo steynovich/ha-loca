@@ -21,6 +21,8 @@ A Home Assistant integration for tracking Loca GPS devices. This integration pro
 - **Services**: Manual refresh and device update services
 - **Diagnostics**: Comprehensive diagnostics for troubleshooting
 - **Repairs**: Automatic issue detection and repair suggestions
+- **Dynamic Device Discovery**: New devices appear automatically without restarting
+- **Stale Device Cleanup**: Removed devices can be cleaned from the device registry
 - **Multiple Devices**: Support for multiple devices on one account
 - **HACS Compatible**: Easy installation via HACS with zip releases
 
@@ -58,17 +60,23 @@ Contact Loca support to obtain your API credentials.
    custom_components/
    └── loca/
        ├── __init__.py
+       ├── api.py
+       ├── base.py
        ├── config_flow.py
        ├── const.py
-       ├── api.py
        ├── coordinator.py
        ├── device_tracker.py
+       ├── diagnostics.py
+       ├── error_handling.py
+       ├── icons.json
+       ├── manifest.json
+       ├── quality_scale.yaml
+       ├── repairs.py
        ├── sensor.py
        ├── services.py
-       ├── diagnostics.py
-       ├── repairs.py
        ├── services.yaml
-       ├── manifest.json
+       ├── types.py
+       ├── validation.py
        └── translations/
            ├── de.json
            ├── en.json
@@ -204,7 +212,15 @@ data:
 
 **Note**: Services are automatically registered when the integration is loaded and unregistered when unloaded.
 
-## Automations Example
+## Use Cases
+
+- **Personal asset tracking** — Keep tabs on vehicles, bikes, or other valuables by viewing real-time location on the Home Assistant map and receiving alerts when devices move or go offline.
+- **Fleet management** — Monitor a group of tracking devices from a single dashboard, using per-device sensors (battery, speed, location accuracy) to spot issues early.
+- **Geofence automation** — Trigger automations when a tracked device enters or leaves a Home Assistant zone (e.g., "arrive home" or "leave the office").
+- **Battery maintenance** — Get notified when tracker batteries run low so you can recharge or replace them before they go offline.
+- **Movement history** — Use the built-in logbook and history panels to review where a device has been and when it was last seen.
+
+## Automation Examples
 
 Here are some example automations you can create:
 
@@ -236,6 +252,35 @@ automation:
           message: "Loca device has been offline for more than 1 hour"
 ```
 
+### Speed Alert
+```yaml
+automation:
+  - alias: "Loca Device Speeding"
+    trigger:
+      - platform: numeric_state
+        entity_id: sensor.loca_device_speed
+        above: 120
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "Loca device is moving at {{ trigger.to_state.state }} km/h"
+```
+
+### Geofence — Device Arrives Home
+```yaml
+automation:
+  - alias: "Loca Device Arrived Home"
+    trigger:
+      - platform: zone
+        entity_id: device_tracker.loca_device
+        zone: zone.home
+        event: enter
+    action:
+      - service: notify.mobile_app_your_phone
+        data:
+          message: "Your tracked device has arrived home"
+```
+
 ## API Information
 
 This integration uses the Loca API v1:
@@ -243,9 +288,14 @@ This integration uses the Loca API v1:
 - **Authentication**: Session-based with API key
 - **Update Interval**: 60 seconds (configurable)
 - **Endpoints Used**:
-  - `Login.json` - Authentication (returns user object)
-  - `Assets.json` - Device information and locations
-- **Response Format**: JSON with user object on successful login
+  - `Login.json` - Authentication (returns session cookies)
+  - `StatusList.json` - Real-time device status and GPS tracking data
+  - `Assets.json` - Device information and metadata
+  - `UserLocationList.json` - User-defined locations/geofences
+  - `Groups.json` - Device groups
+  - `Logout.json` - Session termination
+- **Response Format**: JSON
+- **Session Management**: Automatic 401 retry with re-authentication
 
 ## Troubleshooting
 
@@ -340,18 +390,24 @@ ha-loca/
 │   ├── icon.svg              # Integration icon
 │   └── logo.svg              # Integration logo
 ├── custom_components/loca/    # Main integration
-│   ├── __init__.py           # Integration setup
+│   ├── __init__.py           # Integration setup + stale device cleanup
 │   ├── api.py                # Loca API client
+│   ├── base.py               # Base entity classes
 │   ├── config_flow.py        # Configuration flow
 │   ├── const.py              # Constants and mappings
 │   ├── coordinator.py        # Data update coordinator
 │   ├── device_tracker.py     # Device tracker platform
+│   ├── diagnostics.py        # Diagnostics support
+│   ├── error_handling.py     # Error handling utilities
+│   ├── icons.json            # Icon translations
+│   ├── manifest.json         # Integration metadata
+│   ├── quality_scale.yaml    # HA Quality Scale compliance
+│   ├── repairs.py            # Repairs framework
 │   ├── sensor.py             # Sensor platform (7 sensor types)
 │   ├── services.py           # Integration services
-│   ├── diagnostics.py        # Diagnostics support
-│   ├── repairs.py            # Repairs framework
 │   ├── services.yaml         # Service definitions
-│   ├── manifest.json         # Integration metadata
+│   ├── types.py              # Type definitions
+│   ├── validation.py         # Input validation
 │   └── translations/         # Multi-language support
 │       ├── de.json           # German
 │       ├── en.json           # English (default)
@@ -462,39 +518,6 @@ For HACS compatibility, ensure the GitHub repository has the following topics se
 **Via GitHub CLI:**
 ```bash
 gh repo edit --add-topic home-assistant,hacs,integration,loca,device-tracker,gps-tracking
-```
-
-## Troubleshooting
-
-### Authentication Issues
-
-If you're experiencing authentication problems:
-
-1. **Verify Credentials**: Double-check your API key, username, and password
-2. **Check API Status**: Ensure the Loca API is accessible
-3. **Restart Integration**:
-   - Go to Settings → Devices & Services
-   - Find your Loca integration
-   - Click the three dots → Reload
-4. **Check Logs**: Look for detailed error messages in Home Assistant logs
-
-#### Getting Help
-- Check the [GitHub Issues](https://github.com/steynovich/ha-loca/issues) page
-- Review [CHANGELOG.md](CHANGELOG.md) for known issues and fixes
-- Enable debug logging for detailed troubleshooting
-
-### Debug Logging
-
-To enable detailed logging for troubleshooting:
-
-```yaml
-# Add to configuration.yaml
-logger:
-  default: info
-  logs:
-    custom_components.loca: debug
-    custom_components.loca.api: debug
-    custom_components.loca.coordinator: debug
 ```
 
 ## License

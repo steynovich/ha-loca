@@ -1,6 +1,6 @@
 """Tests for Loca integration initialization."""
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
@@ -174,6 +174,69 @@ class TestAsyncUnloadEntry:
 
             assert result is True
             mock_coordinator.async_shutdown.assert_called_once()
+
+
+class TestAsyncRemoveConfigEntryDevice:
+    """Test async_remove_config_entry_device function."""
+
+    @pytest.mark.asyncio
+    async def test_remove_device_not_in_coordinator(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test removal is allowed when device is not in coordinator data."""
+        from custom_components.loca import async_remove_config_entry_device
+
+        mock_coordinator = AsyncMock()
+        mock_coordinator.data = {"device_1": {"name": "Device 1"}}
+        mock_config_entry.runtime_data = mock_coordinator
+
+        # Create a device entry with an identifier NOT in coordinator data
+        mock_device = MagicMock()
+        mock_device.identifiers = {(DOMAIN, "device_2")}
+
+        result = await async_remove_config_entry_device(
+            hass, mock_config_entry, mock_device
+        )
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_remove_device_still_in_coordinator(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test removal is denied when device is still in coordinator data."""
+        from custom_components.loca import async_remove_config_entry_device
+
+        mock_coordinator = AsyncMock()
+        mock_coordinator.data = {"device_1": {"name": "Device 1"}}
+        mock_config_entry.runtime_data = mock_coordinator
+
+        # Create a device entry with an identifier that IS in coordinator data
+        mock_device = MagicMock()
+        mock_device.identifiers = {(DOMAIN, "device_1")}
+
+        result = await async_remove_config_entry_device(
+            hass, mock_config_entry, mock_device
+        )
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_remove_device_empty_coordinator_data(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test removal is allowed when coordinator data is empty."""
+        from custom_components.loca import async_remove_config_entry_device
+
+        mock_coordinator = AsyncMock()
+        mock_coordinator.data = {}
+        mock_config_entry.runtime_data = mock_coordinator
+
+        mock_device = MagicMock()
+        mock_device.identifiers = {(DOMAIN, "device_1")}
+
+        result = await async_remove_config_entry_device(
+            hass, mock_config_entry, mock_device
+        )
+        assert result is True
 
 
 class TestConstants:

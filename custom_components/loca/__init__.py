@@ -5,6 +5,7 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceEntry
 
 from .const import DOMAIN
 from .coordinator import LocaDataUpdateCoordinator
@@ -59,3 +60,13 @@ async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Reload config entry."""
     await async_unload_entry(hass, entry)
     await async_setup_entry(hass, entry)
+
+
+async def async_remove_config_entry_device(
+    hass: HomeAssistant, entry: ConfigEntry, device_entry: DeviceEntry
+) -> bool:
+    """Allow removal of a device if it is no longer present in the coordinator data."""
+    coordinator: LocaDataUpdateCoordinator = entry.runtime_data
+    return not device_entry.identifiers.intersection(
+        (DOMAIN, device_id) for device_id in coordinator.data
+    )

@@ -35,15 +35,19 @@ The integration follows Home Assistant's standard architecture patterns:
    - Reauthentication flow for credential updates
    - Input validation using `validation.py`
 
-4. **Platforms**:
+4. **Platforms** (both set `PARALLEL_UPDATES = 0`):
    - `device_tracker.py` - GPS location tracking with zone support
    - `sensor.py` - 7 sensor types (battery, speed, location, accuracy, last_seen, asset_info, location_update)
+   - Both platforms support **dynamic device discovery** — new devices are added automatically without requiring a reload
 
 5. **Services** (`services.py`)
    - `loca.refresh_devices` - Manual data refresh for all or specific config entries
    - `loca.force_update` - Force update for specific device by ID
 
-6. **Supporting Modules**:
+6. **Device Lifecycle** (`__init__.py`):
+   - `async_remove_config_entry_device` - Allows removal of stale devices no longer present in the API
+
+7. **Supporting Modules**:
    - `diagnostics.py` - Privacy-aware diagnostic data collection
    - `repairs.py` - Automatic issue detection and repair suggestions
    - `validation.py` - Input validation and sanitization
@@ -51,6 +55,8 @@ The integration follows Home Assistant's standard architecture patterns:
    - `types.py` - TypedDict definitions for API responses
    - `base.py` - Base entity classes with common functionality
    - `const.py` - Constants, mappings, and configuration
+   - `icons.json` - Icon translations for entities and services
+   - `quality_scale.yaml` - HA Integration Quality Scale compliance (Platinum)
 
 ### Entity Structure
 
@@ -80,18 +86,20 @@ The integration follows Home Assistant's standard architecture patterns:
 ```
 ha-loca/
 ├── custom_components/loca/    # Main integration code
-│   ├── __init__.py            # Integration setup/teardown (61 lines)
-│   ├── api.py                 # LocaAPI client (844 lines)
+│   ├── __init__.py            # Integration setup/teardown (72 lines)
+│   ├── api.py                 # LocaAPI client (824 lines)
 │   ├── base.py                # Base entity classes (35 lines)
 │   ├── config_flow.py         # Configuration flow (233 lines)
 │   ├── const.py               # Constants and mappings (106 lines)
-│   ├── coordinator.py         # Data update coordinator (157 lines)
-│   ├── device_tracker.py      # GPS device tracker platform (101 lines)
+│   ├── coordinator.py         # Data update coordinator (172 lines)
+│   ├── device_tracker.py      # GPS device tracker platform (111 lines)
 │   ├── diagnostics.py         # Diagnostics support (138 lines)
-│   ├── error_handling.py      # Error handling utilities (156 lines)
+│   ├── error_handling.py      # Error handling utilities (171 lines)
+│   ├── icons.json             # Icon translations for entities/services
+│   ├── quality_scale.yaml     # HA Integration Quality Scale compliance
 │   ├── repairs.py             # Repair issue management (171 lines)
-│   ├── sensor.py              # Sensor platform - 7 types (331 lines)
-│   ├── services.py            # Service implementations (192 lines)
+│   ├── sensor.py              # Sensor platform - 7 types (342 lines)
+│   ├── services.py            # Service implementations (193 lines)
 │   ├── types.py               # Type definitions (136 lines)
 │   ├── validation.py          # Input validation (162 lines)
 │   ├── manifest.json          # Integration metadata
@@ -163,18 +171,18 @@ pytest-asyncio, pytest-cov, pytest-mock, pytest-xdist, mypy, ruff, and Home Assi
 
 ### Code Quality Tools
 
-Ruff (lint + format) and mypy are the supported tools — both are configured in
-`pyproject.toml`:
+Ruff (lint + format), mypy (strict), and ty are the supported tools — all configured
+in `pyproject.toml`:
 
 ```bash
-# Lint
+# Lint (includes C901 McCabe complexity gate, max-complexity=10)
 .venv/bin/ruff check custom_components/loca tests/
 
 # Format check / apply
 .venv/bin/ruff format --check custom_components/loca tests/
 .venv/bin/ruff format custom_components/loca tests/
 
-# Type check
+# Type check (strict: disallow_untyped_defs=true for integration code, relaxed for tests)
 .venv/bin/mypy --explicit-package-bases custom_components/loca tests/
 ```
 
@@ -359,14 +367,15 @@ HomeAssistantError
 
 ### Code Standards
 - Follow Home Assistant style guide
-- Use type hints for all function signatures
+- Use type hints for all function signatures (strict typing enforced by mypy)
 - Write docstrings for public classes/methods
-- Keep line length under 88 characters (Black formatter)
+- Keep line length under 88 characters (Ruff formatter)
+- Keep cyclomatic complexity ≤10 per function (enforced by ruff C901)
 - Use meaningful variable names
 
 ### Testing Requirements
 - All new code must have unit tests
-- Maintain >80% code coverage
+- Maintain >95% code coverage (currently 98%)
 - Test both success and error paths
 - Mock external API calls
 - Use Home Assistant test fixtures

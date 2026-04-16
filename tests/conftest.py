@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import MappingProxyType
 from unittest.mock import MagicMock, patch
 
 from homeassistant.config_entries import ConfigEntry
@@ -54,7 +55,7 @@ def mock_config_entry():
         options={},
         source="user",
         entry_id="test_entry_id",
-        discovery_keys=set(),
+        discovery_keys=MappingProxyType({}),
         unique_id="test_user",
         subentries_data=frozenset(),  # Required in newer HA versions
     )

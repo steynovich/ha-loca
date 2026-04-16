@@ -862,6 +862,758 @@ class TestAPIProperties:
         assert api.groups_cache_size == 3
 
 
+class TestParseJsonOrLog:
+    """Test _parse_json_or_log method."""
+
+    @pytest.mark.asyncio
+    async def test_successful_parse(self, api: LocaAPI) -> None:
+        """Test successful JSON parsing."""
+        mock_response = MagicMock()
+        mock_response.json = AsyncMock(return_value={"key": "value"})
+
+        result = await api._parse_json_or_log(mock_response, "Test op")
+        assert result == {"key": "value"}
+
+    @pytest.mark.asyncio
+    async def test_parse_failure_returns_none(self, api: LocaAPI) -> None:
+        """Test that parse failure returns None."""
+        mock_response = MagicMock()
+        mock_response.json = AsyncMock(side_effect=ValueError("Invalid JSON"))
+
+        result = await api._parse_json_or_log(mock_response, "Test op")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_parse_failure_with_context(
+        self, api: LocaAPI, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test that parse failure logs with context."""
+        mock_response = MagicMock()
+        mock_response.json = AsyncMock(side_effect=ValueError("bad json"))
+
+        import logging
+
+        with caplog.at_level(logging.ERROR):
+            result = await api._parse_json_or_log(
+                mock_response, "Test op", context="after reauth"
+            )
+
+        assert result is None
+        assert "after reauth" in caplog.text
+
+
+class TestReauthAndRetry:
+    """Test _reauth_and_retry method."""
+
+    @pytest.mark.asyncio
+    async def test_reauth_success_and_retry(self, api: LocaAPI) -> None:
+        """Test successful reauthentication and retry."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        # Retry response succeeds
+        mock_retry_resp = MagicMock()
+        mock_retry_resp.status = 200
+        mock_retry_resp.json = AsyncMock(return_value={"data": "ok"})
+        mock_session.post.return_value.__aenter__.return_value = mock_retry_resp
+
+        with patch.object(api, "authenticate", return_value=True):
+            result = await api._reauth_and_retry(
+                mock_session,
+                "https://api.loca.nl/v1/StatusList.json",
+                {"key": "test"},
+                "Test op",
+            )
+        assert result == {"data": "ok"}
+
+    @pytest.mark.asyncio
+    async def test_reauth_failure(self, api: LocaAPI) -> None:
+        """Test reauthentication failure returns None."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        with patch.object(api, "authenticate", return_value=False):
+            result = await api._reauth_and_retry(
+                mock_session,
+                "https://api.loca.nl/v1/StatusList.json",
+                {"key": "test"},
+                "Test op",
+            )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_reauth_success_retry_fails(self, api: LocaAPI) -> None:
+        """Test reauth succeeds but retry request fails."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_retry_resp = MagicMock()
+        mock_retry_resp.status = 500
+        mock_session.post.return_value.__aenter__.return_value = mock_retry_resp
+
+        with patch.object(api, "authenticate", return_value=True):
+            result = await api._reauth_and_retry(
+                mock_session,
+                "https://api.loca.nl/v1/StatusList.json",
+                {"key": "test"},
+                "Test op",
+            )
+        assert result is None
+
+
+class TestExtractAssets:
+    """Test _extract_assets method."""
+
+    def test_list_response(self, api: LocaAPI) -> None:
+        """Test extracting assets from a list response."""
+        data = [{"id": "1"}, {"id": "2"}]
+        result = api._extract_assets(data)
+        assert result == data
+
+    def test_dict_with_assets_key(self, api: LocaAPI) -> None:
+        """Test extracting assets from dict with 'assets' key."""
+        data = {"assets": [{"id": "1"}]}
+        result = api._extract_assets(data)
+        assert result == [{"id": "1"}]
+
+    def test_dict_keyed_by_id(self, api: LocaAPI) -> None:
+        """Test fallback parsing for dict keyed by numeric strings."""
+        data = {"123": {"id": "123", "name": "Device"}}
+        result = api._extract_assets(data)
+        assert result == [{"id": "123", "name": "Device"}]
+
+    def test_dict_keyed_by_asset_prefix(self, api: LocaAPI) -> None:
+        """Test fallback parsing for dict keyed by 'asset' prefix."""
+        data = {"asset_1": {"id": "1"}}
+        result = api._extract_assets(data)
+        assert result == [{"id": "1"}]
+
+    def test_dict_keyed_by_id_non_dict_values(self, api: LocaAPI) -> None:
+        """Test fallback parsing when values are not dicts."""
+        data = {"123": "not_a_dict"}
+        result = api._extract_assets(data)
+        assert result == []
+
+    def test_unrecognized_dict(self, api: LocaAPI) -> None:
+        """Test that unrecognized dict returns None."""
+        data = {"status": "error", "message": "Bad request"}
+        result = api._extract_assets(data)
+        assert result is None
+
+    def test_non_dict_non_list(self, api: LocaAPI) -> None:
+        """Test non-dict, non-list returns None."""
+        result = api._extract_assets("string")
+        assert result is None
+
+    def test_none_input(self, api: LocaAPI) -> None:
+        """Test None input returns None."""
+        result = api._extract_assets(None)
+        assert result is None
+
+
+class TestExtractListFromResponse:
+    """Test _extract_list_from_response static method."""
+
+    def test_direct_list(self) -> None:
+        """Test extraction from direct list."""
+        data = [{"id": 1}, {"id": 2}]
+        result, source = LocaAPI._extract_list_from_response(data, ["items"])
+        assert result == data
+        assert source == "direct array"
+
+    def test_dict_with_matching_key(self) -> None:
+        """Test extraction from dict with matching key."""
+        data = {"StatusList": [{"id": 1}], "other": "value"}
+        result, source = LocaAPI._extract_list_from_response(
+            data, ["StatusList", "devices"]
+        )
+        assert result == [{"id": 1}]
+        assert source == "StatusList"
+
+    def test_nested_dict_extraction(self) -> None:
+        """Test extraction from nested dict using tuple candidate."""
+        data = {"response": {"UserLocationList": [{"id": 1}]}}
+        result, source = LocaAPI._extract_list_from_response(
+            data, [("response", "UserLocationList")]
+        )
+        assert result == [{"id": 1}]
+        assert source == "response.UserLocationList"
+
+    def test_no_match(self) -> None:
+        """Test no match returns None."""
+        data = {"unknown_key": "value"}
+        result, source = LocaAPI._extract_list_from_response(
+            data, ["StatusList", "devices"]
+        )
+        assert result is None
+        assert source == ""
+
+    def test_non_dict_non_list(self) -> None:
+        """Test non-dict, non-list returns None."""
+        result, source = LocaAPI._extract_list_from_response("string", ["items"])
+        assert result is None
+        assert source == ""
+
+    def test_nested_parent_not_dict(self) -> None:
+        """Test nested extraction when parent is not a dict."""
+        data = {"response": "not_a_dict"}
+        result, _source = LocaAPI._extract_list_from_response(
+            data, [("response", "items")]
+        )
+        assert result is None
+
+    def test_nested_child_not_list(self) -> None:
+        """Test nested extraction when child is not a list."""
+        data = {"response": {"items": "not_a_list"}}
+        result, _source = LocaAPI._extract_list_from_response(
+            data, [("response", "items")]
+        )
+        assert result is None
+
+    def test_candidate_value_not_list(self) -> None:
+        """Test that non-list candidate values are skipped."""
+        data = {"StatusList": "not a list", "devices": [{"id": 1}]}
+        result, source = LocaAPI._extract_list_from_response(
+            data, ["StatusList", "devices"]
+        )
+        assert result == [{"id": 1}]
+        assert source == "devices"
+
+
+class TestLogUnexpectedResponse:
+    """Test _log_unexpected_response method."""
+
+    def test_dict_with_error_message(
+        self, api: LocaAPI, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test logging dict response with error message."""
+        import logging
+
+        with caplog.at_level(logging.ERROR):
+            api._log_unexpected_response("Test", {"message": "Auth failed"})
+        assert "Auth failed" in caplog.text
+
+    def test_dict_without_error_message(
+        self, api: LocaAPI, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test logging dict response without error message."""
+        import logging
+
+        with caplog.at_level(logging.ERROR):
+            api._log_unexpected_response("Test", {"unknown_key": "value"})
+        assert "Unexpected response format" in caplog.text
+
+    def test_non_dict_response(
+        self, api: LocaAPI, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test logging non-dict response."""
+        import logging
+
+        with caplog.at_level(logging.ERROR):
+            api._log_unexpected_response("Test", "string_response")
+        assert "Unexpected Test response type" in caplog.text
+
+
+class TestPostAndRetryOn401:
+    """Test _post_and_retry_on_401 method."""
+
+    @pytest.mark.asyncio
+    async def test_401_triggers_reauth_and_retry(self, api: LocaAPI) -> None:
+        """Test that 401 triggers reauthentication and retry."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        # First response: 401
+        mock_resp_401 = MagicMock()
+        mock_resp_401.status = 401
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp_401
+
+        with (
+            patch.object(api, "_get_session", return_value=mock_session),
+            patch.object(
+                api,
+                "_reauth_and_retry",
+                return_value={"status": "ok"},
+            ) as mock_reauth,
+        ):
+            result = await api._post_and_retry_on_401("TestEndpoint.json", "Test op")
+
+        assert result == {"status": "ok"}
+        mock_reauth.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_403_triggers_reauth_and_retry(self, api: LocaAPI) -> None:
+        """Test that 403 triggers reauthentication and retry."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp_403 = MagicMock()
+        mock_resp_403.status = 403
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp_403
+
+        with (
+            patch.object(api, "_get_session", return_value=mock_session),
+            patch.object(
+                api,
+                "_reauth_and_retry",
+                return_value=None,
+            ) as mock_reauth,
+        ):
+            result = await api._post_and_retry_on_401("TestEndpoint.json", "Test op")
+
+        assert result is None
+        mock_reauth.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_non_auth_error_returns_none(self, api: LocaAPI) -> None:
+        """Test that generic exceptions return None (not connectivity)."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = ValueError("Unexpected error")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api._post_and_retry_on_401("TestEndpoint.json", "Test op")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_not_authenticated_calls_authenticate(self, api: LocaAPI) -> None:
+        """Test that unauthenticated client calls authenticate first."""
+        api._authenticated = False
+
+        with patch.object(api, "authenticate", return_value=False) as mock_auth:
+            result = await api._post_and_retry_on_401("TestEndpoint.json", "Test op")
+
+        assert result is None
+        mock_auth.assert_called_once()
+
+
+class TestAPIResponseHelperAdditional:
+    """Test additional APIResponseHelper methods."""
+
+    def test_extract_error_message_various_fields(self) -> None:
+        """Test error message extraction from various field names."""
+        from custom_components.loca.api import APIResponseHelper
+
+        assert APIResponseHelper.extract_error_message({"message": "err1"}) == "err1"
+        assert APIResponseHelper.extract_error_message({"error": "err2"}) == "err2"
+        assert (
+            APIResponseHelper.extract_error_message({"description": "err3"}) == "err3"
+        )
+        assert APIResponseHelper.extract_error_message({"detail": "err4"}) == "err4"
+        assert APIResponseHelper.extract_error_message({"reason": "err5"}) == "err5"
+        assert APIResponseHelper.extract_error_message({}) is None
+
+    def test_format_dutch_address_full(self) -> None:
+        """Test formatting Dutch address with all parts."""
+        from custom_components.loca.api import APIResponseHelper
+
+        data = {
+            "street": "Brouwerstraat",
+            "number": "30",
+            "zipcode": "2984AR",
+            "city": "Ridderkerk",
+            "country": "Netherlands",
+        }
+        result = APIResponseHelper.format_dutch_address(data)
+        assert result == "Brouwerstraat 30, 2984AR Ridderkerk, Netherlands"
+
+    def test_format_dutch_address_street_only(self) -> None:
+        """Test formatting Dutch address with street only."""
+        from custom_components.loca.api import APIResponseHelper
+
+        data = {"street": "Brouwerstraat"}
+        result = APIResponseHelper.format_dutch_address(data)
+        assert result == "Brouwerstraat"
+
+    def test_format_dutch_address_empty(self) -> None:
+        """Test formatting Dutch address with empty data."""
+        from custom_components.loca.api import APIResponseHelper
+
+        result = APIResponseHelper.format_dutch_address({})
+        assert result is None
+
+    def test_format_dutch_address_city_only(self) -> None:
+        """Test formatting Dutch address with city only."""
+        from custom_components.loca.api import APIResponseHelper
+
+        data = {"city": "Amsterdam"}
+        result = APIResponseHelper.format_dutch_address(data)
+        assert result == "Amsterdam"
+
+    def test_safe_int_conversion(self) -> None:
+        """Test safe integer conversion."""
+        from custom_components.loca.api import APIResponseHelper
+
+        assert APIResponseHelper.safe_int_conversion(42) == 42
+        assert APIResponseHelper.safe_int_conversion("42") == 42
+        assert APIResponseHelper.safe_int_conversion(42.7) == 42
+        assert APIResponseHelper.safe_int_conversion(None) == 0
+        assert APIResponseHelper.safe_int_conversion("invalid") == 0
+        assert APIResponseHelper.safe_int_conversion(None, default=5) == 5
+
+    def test_safe_float_conversion(self) -> None:
+        """Test safe float conversion."""
+        from custom_components.loca.api import APIResponseHelper
+
+        assert APIResponseHelper.safe_float_conversion(3.14) == 3.14
+        assert APIResponseHelper.safe_float_conversion("3.14") == 3.14
+        assert APIResponseHelper.safe_float_conversion(42) == 42.0
+        assert APIResponseHelper.safe_float_conversion(None) == 0.0
+        assert APIResponseHelper.safe_float_conversion("invalid") == 0.0
+        assert APIResponseHelper.safe_float_conversion(None, default=1.5) == 1.5
+
+
+class TestAuthenticationEdgeCases:
+    """Test authentication edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_authenticate_missing_credentials(self) -> None:
+        """Test authentication with missing credentials."""
+        api = LocaAPI("", "", "")
+        result = await api.authenticate()
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_authenticate_json_parse_error(self, api: LocaAPI) -> None:
+        """Test authentication with JSON parse error in 200 response."""
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_test_resp = MagicMock()
+        mock_test_resp.status = 200
+
+        mock_auth_resp = MagicMock()
+        mock_auth_resp.status = 200
+        mock_auth_resp.json = AsyncMock(side_effect=ValueError("Bad JSON"))
+        mock_auth_resp.text = AsyncMock(return_value="<html>Not JSON</html>")
+
+        mock_session.get.return_value.__aenter__.return_value = mock_test_resp
+        mock_session.post.return_value.__aenter__.return_value = mock_auth_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.authenticate()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_authenticate_no_user_but_no_error(self, api: LocaAPI) -> None:
+        """Test authentication response with no user and no error field."""
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_test_resp = MagicMock()
+        mock_test_resp.status = 200
+
+        mock_auth_resp = MagicMock()
+        mock_auth_resp.status = 200
+        mock_auth_resp.json = AsyncMock(return_value={"status": "ok"})
+
+        mock_session.get.return_value.__aenter__.return_value = mock_test_resp
+        mock_session.post.return_value.__aenter__.return_value = mock_auth_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.authenticate()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_authenticate_http_error_text_read_failure(
+        self, api: LocaAPI
+    ) -> None:
+        """Test authentication with HTTP error where text() fails."""
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_test_resp = MagicMock()
+        mock_test_resp.status = 200
+
+        mock_auth_resp = MagicMock()
+        mock_auth_resp.status = 500
+        mock_auth_resp.text = AsyncMock(side_effect=Exception("read failed"))
+
+        mock_session.get.return_value.__aenter__.return_value = mock_test_resp
+        mock_session.post.return_value.__aenter__.return_value = mock_auth_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.authenticate()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_handle_auth_error_ssl(self, api: LocaAPI) -> None:
+        """Test _handle_auth_error with SSL error."""
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = Exception("SSL certificate verify failed")
+
+        mock_test_resp = MagicMock()
+        mock_test_resp.status = 200
+        mock_session.get.return_value.__aenter__.return_value = mock_test_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.authenticate()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_handle_auth_error_403(self, api: LocaAPI) -> None:
+        """Test _handle_auth_error with 403 forbidden."""
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = Exception("403 Forbidden access")
+
+        mock_test_resp = MagicMock()
+        mock_test_resp.status = 200
+        mock_session.get.return_value.__aenter__.return_value = mock_test_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.authenticate()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_handle_auth_error_404(self, api: LocaAPI) -> None:
+        """Test _handle_auth_error with 404 not found."""
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = Exception("404 Not Found")
+
+        mock_test_resp = MagicMock()
+        mock_test_resp.status = 200
+        mock_session.get.return_value.__aenter__.return_value = mock_test_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.authenticate()
+            assert result is False
+
+
+class TestLogoutEdgeCases:
+    """Test logout edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_logout_error_response(self, api: LocaAPI) -> None:
+        """Test logout with error in response data."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={"status": "error", "message": "Session expired"}
+        )
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.logout()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_logout_http_error(self, api: LocaAPI) -> None:
+        """Test logout with HTTP error."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 500
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.logout()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_logout_connectivity_error(self, api: LocaAPI) -> None:
+        """Test logout with connectivity error."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = ConnectionError("Network down")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.logout()
+            assert result is False
+
+    @pytest.mark.asyncio
+    async def test_logout_non_connectivity_error(self, api: LocaAPI) -> None:
+        """Test logout with non-connectivity error."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+        mock_session.post.side_effect = ValueError("Unexpected")
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.logout()
+            assert result is False
+
+
+class TestGetAssetsEdgeCases:
+    """Test get_assets with edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_get_assets_empty_list(self, api: LocaAPI) -> None:
+        """Test get_assets returns empty list for empty assets."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"assets": []})
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_assets()
+            assert result == []
+
+
+class TestGetStatusListEdgeCases:
+    """Test get_status_list edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_get_status_list_dict_response(self, api: LocaAPI) -> None:
+        """Test get_status_list with dict containing StatusList key."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={"StatusList": [{"Asset": {"id": "1"}}]}
+        )
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_status_list()
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_status_list_unexpected_response(self, api: LocaAPI) -> None:
+        """Test get_status_list with unexpected response."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"status": "error"})
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_status_list()
+            assert result == []
+
+
+class TestGetUserLocationsEdgeCases:
+    """Test get_user_locations edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_get_user_locations_nested_response(self, api: LocaAPI) -> None:
+        """Test get_user_locations with nested response format."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(
+            return_value={
+                "response": {"UserLocationList": [{"id": "1", "label": "Home"}]}
+            }
+        )
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_user_locations()
+            assert len(result) == 1
+            assert result[0]["label"] == "Home"
+
+    @pytest.mark.asyncio
+    async def test_get_user_locations_unexpected_response(self, api: LocaAPI) -> None:
+        """Test get_user_locations with unexpected response."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"error": "not found"})
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_user_locations()
+            assert result == []
+
+
+class TestGetGroupsEdgeCases:
+    """Test get_groups edge cases."""
+
+    @pytest.mark.asyncio
+    async def test_get_groups_direct_array(self, api: LocaAPI) -> None:
+        """Test get_groups with direct array response."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value=[{"id": 1, "label": "Group 1"}])
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_groups()
+            assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_groups_error_response_dict(self, api: LocaAPI) -> None:
+        """Test get_groups with error dict response."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"error": "Unauthorized"})
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_groups()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_groups_unexpected_format(self, api: LocaAPI) -> None:
+        """Test get_groups with unexpected format dict."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value={"status": "ok"})
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_groups()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_groups_non_dict_non_list(self, api: LocaAPI) -> None:
+        """Test get_groups with non-dict, non-list response."""
+        api._authenticated = True
+        mock_session = AsyncMock(spec=ClientSession)
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+        mock_resp.json = AsyncMock(return_value="not a valid response")
+
+        mock_session.post.return_value.__aenter__.return_value = mock_resp
+
+        with patch.object(api, "_get_session", return_value=mock_session):
+            result = await api.get_groups()
+            assert result == []
+
+    @pytest.mark.asyncio
+    async def test_get_groups_not_authenticated(self, api: LocaAPI) -> None:
+        """Test get_groups when not authenticated."""
+        api._authenticated = False
+
+        with patch.object(api, "authenticate", return_value=False):
+            result = await api.get_groups()
+            assert result == []
+
+
 class TestTimestampParsing:
     """Test timestamp parsing in APIResponseHelper."""
 

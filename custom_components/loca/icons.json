@@ -1,0 +1,36 @@
+{
+  "entity": {
+    "device_tracker": {
+      "default": {
+        "default": "mdi:map-marker"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "default": "mdi:battery"
+      },
+      "last_seen": {
+        "default": "mdi:clock-outline"
+      },
+      "location_accuracy": {
+        "default": "mdi:crosshairs-gps"
+      },
+      "speed": {
+        "default": "mdi:speedometer"
+      },
+      "asset_info": {
+        "default": "mdi:information-outline"
+      },
+      "location_update": {
+        "default": "mdi:update"
+      },
+      "location": {
+        "default": "mdi:home-map-marker"
+      }
+    }
+  },
+  "services": {
+    "refresh_devices": "mdi:refresh",
+    "force_update": "mdi:update"
+  }
+}

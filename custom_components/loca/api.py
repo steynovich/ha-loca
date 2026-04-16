@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 import logging
-from typing import Any
+from typing import Any, cast
 
 from aiohttp import ClientSession, ClientTimeout
 from homeassistant.core import HomeAssistant
@@ -364,6 +364,46 @@ class LocaAPI:
             self._handle_auth_error(err)
             return False
 
+    async def _parse_json_or_log(
+        self, response: Any, operation_name: str, *, context: str = ""
+    ) -> dict[str, Any] | list[Any] | None:
+        """Parse a JSON body, logging and returning None on failure."""
+        try:
+            return await response.json()
+        except Exception as json_err:
+            suffix = f" {context}" if context else ""
+            _LOGGER.error(
+                "Failed to parse JSON from %s%s: %s",
+                operation_name,
+                suffix,
+                json_err,
+            )
+            return None
+
+    async def _reauth_and_retry(
+        self,
+        session: ClientSession,
+        url: str,
+        payload: dict[str, Any],
+        operation_name: str,
+    ) -> dict[str, Any] | list[Any] | None:
+        """Clear auth, re-authenticate, and retry the POST exactly once."""
+        self._authenticated = False
+        if not await self.authenticate():
+            _LOGGER.error("%s: re-authentication failed", operation_name)
+            return None
+        async with session.post(url, json=payload) as retry_response:
+            if retry_response.status == HTTPStatus.OK:
+                return await self._parse_json_or_log(
+                    retry_response, operation_name, context="after reauth"
+                )
+            _LOGGER.error(
+                "%s failed after reauth with status: %s",
+                operation_name,
+                retry_response.status,
+            )
+            return None
+
     async def _post_and_retry_on_401(
         self, endpoint: str, operation_name: str
     ) -> dict[str, Any] | list[Any] | None:
@@ -384,62 +424,30 @@ class LocaAPI:
         session = await self._get_session()
         url = f"{API_BASE_URL}/{endpoint}"
         payload = {"key": self._api_key}
+        auth_expired_statuses = (HTTPStatus.UNAUTHORIZED, HTTPStatus.FORBIDDEN)
 
         try:
-            async with asyncio.timeout(API_TIMEOUT):
-                async with session.post(url, json=payload) as response:
-                    # Session may have expired server-side: clear flag, reauth,
-                    # retry once.
-                    if response.status in (
-                        HTTPStatus.UNAUTHORIZED,
-                        HTTPStatus.FORBIDDEN,
-                    ):
-                        _LOGGER.info(
-                            "%s got HTTP %s - session may have expired, re-authenticating",
-                            operation_name,
-                            response.status,
-                        )
-                        self._authenticated = False
-                        if not await self.authenticate():
-                            _LOGGER.error(
-                                "%s: re-authentication failed", operation_name
-                            )
-                            return None
-                        async with session.post(url, json=payload) as retry_response:
-                            if retry_response.status == HTTPStatus.OK:
-                                try:
-                                    return await retry_response.json()
-                                except Exception as json_err:
-                                    _LOGGER.error(
-                                        "Failed to parse JSON after reauth (%s): %s",
-                                        operation_name,
-                                        json_err,
-                                    )
-                                    return None
-                            _LOGGER.error(
-                                "%s failed after reauth with status: %s",
-                                operation_name,
-                                retry_response.status,
-                            )
-                            return None
-
-                    if response.status == HTTPStatus.OK:
-                        try:
-                            return await response.json()
-                        except Exception as json_err:
-                            _LOGGER.error(
-                                "Failed to parse JSON from %s: %s",
-                                operation_name,
-                                json_err,
-                            )
-                            return None
-
-                    _LOGGER.error(
-                        "%s failed with status: %s",
+            async with (
+                asyncio.timeout(API_TIMEOUT),
+                session.post(url, json=payload) as response,
+            ):
+                if response.status in auth_expired_statuses:
+                    _LOGGER.info(
+                        "%s got HTTP %s - session may have expired, re-authenticating",
                         operation_name,
                         response.status,
                     )
-                    return None
+                    return await self._reauth_and_retry(
+                        session, url, payload, operation_name
+                    )
+
+                if response.status == HTTPStatus.OK:
+                    return await self._parse_json_or_log(response, operation_name)
+
+                _LOGGER.error(
+                    "%s failed with status: %s", operation_name, response.status
+                )
+                return None
 
         except TimeoutError as err:
             _LOGGER.warning(
@@ -491,6 +499,35 @@ class LocaAPI:
                 _LOGGER.exception("Error during logout: %s", err)
             return False
 
+    def _extract_assets(self, data: Any) -> list[dict[str, Any]] | None:
+        """Pull an assets list out of a response payload, or None if not found."""
+        if isinstance(data, list):
+            return data
+        if not isinstance(data, dict):
+            return None
+        if "assets" in data:
+            return data.get("assets", [])
+        # Fallback: dict keyed by id / "asset*" whose values are themselves dicts
+        if any(key.isdigit() or "asset" in key.lower() for key in data):
+            _LOGGER.debug("Using fallback asset parsing for dict response")
+            values = list(data.values())
+            if all(isinstance(v, dict) for v in values):
+                return cast("list[dict[str, Any]]", values)
+            return []
+        return None
+
+    def _log_unexpected_response(self, operation: str, data: Any) -> None:
+        """Log a response that doesn't match any known shape."""
+        if isinstance(data, dict):
+            status = data.get("status", "no status field")
+            error_detail = (
+                APIResponseHelper.extract_error_message(data)
+                or f"Unexpected response format (status='{status}')"
+            )
+            _LOGGER.error("%s request failed: %s", operation, error_detail)
+        else:
+            _LOGGER.error("Unexpected %s response type: %s", operation, type(data))
+
     async def get_assets(self) -> list[dict[str, Any]]:
         """Get all assets (devices) from the Loca API."""
         data = await self._post_and_retry_on_401(API_ASSETS_ENDPOINT, "Get assets")
@@ -502,42 +539,49 @@ class LocaAPI:
             list(data.keys()) if isinstance(data, dict) else "Not a dict",
         )
 
-        # Check for direct assets array or nested structure
-        assets: list[dict[str, Any]] | None = None
-        if isinstance(data, list):
-            # Response is directly an array of assets
-            assets = data
-        elif isinstance(data, dict) and "assets" in data:
-            # Response has assets field (with status="ok" format)
-            assets = data.get("assets", [])
-        elif isinstance(data, dict) and any(
-            key.isdigit() or "asset" in key.lower() for key in data
-        ):
-            # Response might be a dict of assets
-            _LOGGER.debug("Using fallback asset parsing for dict response")
-            assets = (
-                list(data.values())
-                if all(isinstance(v, dict) for v in data.values())
-                else []
+        assets = self._extract_assets(data)
+        if assets is None:
+            self._log_unexpected_response("Assets", data)
+            return []
+
+        _LOGGER.info("Successfully retrieved %s assets from Loca API", len(assets))
+        if not assets:
+            _LOGGER.info(
+                "No devices found in Loca account - this is normal for new accounts"
             )
+        return assets
 
-        if assets is not None:
-            _LOGGER.info("Successfully retrieved %s assets from Loca API", len(assets))
-            if not assets:
-                _LOGGER.info(
-                    "No devices found in Loca account - this is normal for new accounts"
-                )
-            return assets
+    @staticmethod
+    def _extract_list_from_response(
+        data: Any, candidates: list[str | tuple[str, str]]
+    ) -> tuple[list[dict[str, Any]] | None, str]:
+        """Extract a list from a response payload by trying shapes in order.
 
-        if isinstance(data, dict):
-            status = data.get("status", "no status field")
-            error_detail = APIResponseHelper.extract_error_message(data)
-            if not error_detail:
-                error_detail = f"Unexpected response format (status='{status}')"
-            _LOGGER.error("Assets request failed: %s", error_detail)
-        else:
-            _LOGGER.error("Unexpected Assets response type: %s", type(data))
-        return []
+        ``candidates`` items are either a string (``data[key]``) or a
+        ``(parent, child)`` tuple (``data[parent][child]``). Returns
+        ``(matched_list, source_description)`` or ``(None, "")`` when nothing
+        matched. A direct list payload always wins and bypasses ``candidates``.
+        """
+        if isinstance(data, list):
+            return data, "direct array"
+        if not isinstance(data, dict):
+            return None, ""
+
+        for candidate in candidates:
+            if isinstance(candidate, tuple):
+                parent_key, child_key = candidate
+                parent = data.get(parent_key)
+                if (
+                    isinstance(parent, dict)
+                    and child_key in parent
+                    and isinstance(parent[child_key], list)
+                ):
+                    return parent[child_key], f"{parent_key}.{child_key}"
+                continue
+            value = data.get(candidate)
+            if isinstance(value, list):
+                return value, candidate
+        return None, ""
 
     async def get_user_locations(self) -> list[dict[str, Any]]:
         """Get user-defined locations from the Loca API."""
@@ -549,48 +593,14 @@ class LocaAPI:
 
         _LOGGER.debug("Locations response data type: %s", type(data))
 
-        # UserLocationList.json returns a direct array of location objects
-        if isinstance(data, list):
-            _LOGGER.debug("Retrieved %s user locations from direct array", len(data))
-            return data
-        if isinstance(data, dict):
-            # Check for nested response format: response.UserLocationList (fallback)
-            if data.get("response") and isinstance(data["response"], dict):
-                response_obj = data["response"]
-                if "UserLocationList" in response_obj:
-                    locations = response_obj["UserLocationList"]
-                    if isinstance(locations, list):
-                        _LOGGER.debug(
-                            "Retrieved %s user locations from response.UserLocationList",
-                            len(locations),
-                        )
-                        return locations
+        locations, source = self._extract_list_from_response(
+            data, [("response", "UserLocationList"), "locations"]
+        )
+        if locations is not None:
+            _LOGGER.debug("Retrieved %s user locations from %s", len(locations), source)
+            return locations
 
-            # Check if it's wrapped in a status response (fallback)
-            if data.get("status") == "ok" and data.get("locations"):
-                locations = data.get("locations", [])
-                _LOGGER.debug(
-                    "Retrieved %s user locations from wrapped response",
-                    len(locations),
-                )
-                return locations
-
-            # Check for direct locations field (fallback)
-            if data.get("locations") and isinstance(data["locations"], list):
-                locations = data["locations"]
-                _LOGGER.debug(
-                    "Retrieved %s user locations from direct locations field",
-                    len(locations),
-                )
-                return locations
-
-            error_detail = APIResponseHelper.extract_error_message(data)
-            if error_detail:
-                _LOGGER.error("Failed to get locations: %s", error_detail)
-            else:
-                _LOGGER.error("Unexpected locations response format")
-            return []
-        _LOGGER.error("Unexpected locations response type: %s", type(data))
+        self._log_unexpected_response("locations", data)
         return []
 
     async def get_status_list(self) -> list[dict[str, Any]]:
@@ -601,46 +611,16 @@ class LocaAPI:
 
         _LOGGER.debug("StatusList response data type: %s", type(data))
 
-        # StatusList.json returns data nested under StatusList key
-        if isinstance(data, list):
-            # Response is directly an array of status entries (fallback)
-            _LOGGER.debug("Retrieved %s status entries from direct array", len(data))
-            return data
-        if isinstance(data, dict):
-            # Check for the actual Loca API format: StatusList key
-            if "StatusList" in data and isinstance(data["StatusList"], list):
-                status_list = data["StatusList"]
-                _LOGGER.debug(
-                    "Retrieved %s status entries from StatusList key",
-                    len(status_list),
-                )
-                return status_list
+        status_list, source = self._extract_list_from_response(
+            data, ["StatusList", "devices"]
+        )
+        if status_list is not None:
+            _LOGGER.debug(
+                "Retrieved %s status entries from %s", len(status_list), source
+            )
+            return status_list
 
-            # Check for various other possible response structures (fallbacks)
-            if data.get("status") == "ok" and data.get("devices"):
-                devices = data.get("devices", [])
-                _LOGGER.debug(
-                    "Retrieved %s status entries from wrapped response",
-                    len(devices),
-                )
-                return devices
-
-            # Check for direct devices field
-            if data.get("devices") and isinstance(data["devices"], list):
-                devices = data["devices"]
-                _LOGGER.debug(
-                    "Retrieved %s status entries from devices field",
-                    len(devices),
-                )
-                return devices
-
-            error_detail = APIResponseHelper.extract_error_message(data)
-            if error_detail:
-                _LOGGER.error("Failed to get status list: %s", error_detail)
-            else:
-                _LOGGER.error("Unexpected StatusList response format")
-            return []
-        _LOGGER.error("Unexpected StatusList response type: %s", type(data))
+        self._log_unexpected_response("StatusList", data)
         return []
 
     async def get_groups(self) -> list[dict[str, Any]]:

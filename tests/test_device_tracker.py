@@ -254,3 +254,65 @@ class TestLocaDeviceTracker:
 
         # Should fallback to radar when no asset_info
         assert self.device_tracker.icon == "mdi:radar"
+
+
+class TestDeviceTrackerAsyncAddNewDevices:
+    """Test the _async_add_new_devices listener in device_tracker setup."""
+
+    @pytest.mark.asyncio
+    async def test_new_devices_added_on_coordinator_update(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test that new device trackers are added when coordinator data changes."""
+        mock_coordinator = MagicMock()
+        mock_coordinator.data = {
+            "device1": {"name": "Device 1"},
+        }
+
+        mock_config_entry.runtime_data = mock_coordinator
+
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, mock_config_entry, async_add_entities)
+
+        # First call creates initial entities
+        assert async_add_entities.call_count == 1
+        initial_entities = async_add_entities.call_args_list[0][0][0]
+        assert len(initial_entities) == 1
+
+        # Get the listener
+        listener_call = mock_coordinator.async_add_listener.call_args[0][0]
+
+        # Simulate coordinator update with new device
+        mock_coordinator.data = {
+            "device1": {"name": "Device 1"},
+            "device2": {"name": "Device 2"},
+        }
+        listener_call()
+
+        # Second call should create entity only for the new device
+        assert async_add_entities.call_count == 2
+        new_entities = async_add_entities.call_args_list[1][0][0]
+        assert len(new_entities) == 1
+        assert all(isinstance(e, LocaDeviceTracker) for e in new_entities)
+
+    @pytest.mark.asyncio
+    async def test_no_new_devices_no_call(self, hass: HomeAssistant, mock_config_entry):
+        """Test that listener does nothing when no new devices found."""
+        mock_coordinator = MagicMock()
+        mock_coordinator.data = {
+            "device1": {"name": "Device 1"},
+        }
+
+        mock_config_entry.runtime_data = mock_coordinator
+        async_add_entities = MagicMock()
+
+        await async_setup_entry(hass, mock_config_entry, async_add_entities)
+
+        listener_call = mock_coordinator.async_add_listener.call_args[0][0]
+
+        # Call listener without changing data - no new devices
+        listener_call()
+
+        # async_add_entities should still only have been called once (initial)
+        assert async_add_entities.call_count == 1
