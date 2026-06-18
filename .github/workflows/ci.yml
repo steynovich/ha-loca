@@ -15,7 +15,11 @@ on:
   workflow_dispatch:
 
 env:
-  DEFAULT_PYTHON: "3.14"
+  # Pin the full patch version: a cached venv hardcodes its interpreter path,
+  # so all jobs must resolve the identical Python build. GitHub's runner-image
+  # rollout otherwise hands different patches (e.g. 3.14.5 vs 3.14.6) to jobs in
+  # the same run, breaking venv cache restores. Bump deliberately.
+  DEFAULT_PYTHON: "3.14.6"
 
 jobs:
   info:
@@ -25,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.0
 
       - name: Generate Python venv restore key
         id: generate_python_cache_key
@@ -44,7 +48,7 @@ jobs:
           ignore: brands
 
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7.0.0
 
       - name: hassfest
         uses: home-assistant/actions/hassfest@master
@@ -56,21 +60,21 @@ jobs:
       - info
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Python ${{ env.DEFAULT_PYTHON }}
         id: python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
 
       - name: Restore Python virtual environment
         id: cache-venv
-        uses: actions/cache@v4.2.0
+        uses: actions/cache@v5.0.5
         with:
           path: venv
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Create Python virtual environment
         if: steps.cache-venv.outputs.cache-hit != 'true'
@@ -88,22 +92,22 @@ jobs:
       - prepare
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Python ${{ env.DEFAULT_PYTHON }}
         id: python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
 
       - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
         id: cache-venv
-        uses: actions/cache/restore@v4.2.0
+        uses: actions/cache/restore@v5.0.5
         with:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run translations check
         run: |
@@ -155,22 +159,22 @@ jobs:
       - prepare
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Python ${{ env.DEFAULT_PYTHON }}
         id: python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
 
       - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
         id: cache-venv
-        uses: actions/cache/restore@v4.2.0
+        uses: actions/cache/restore@v5.0.5
         with:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run ruff linting
         run: |
@@ -193,22 +197,22 @@ jobs:
       - prepare
     steps:
       - name: Check out code
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Python ${{ env.DEFAULT_PYTHON }}
         id: python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
 
       - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
         id: cache-venv
-        uses: actions/cache/restore@v4.2.0
+        uses: actions/cache/restore@v5.0.5
         with:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run mypy
         run: |
@@ -226,22 +230,22 @@ jobs:
       - mypy
     steps:
       - name: Check out code from GitHub
-        uses: actions/checkout@v4.2.2
+        uses: actions/checkout@v7.0.0
 
       - name: Set up Python ${{ env.DEFAULT_PYTHON }}
         id: python
-        uses: actions/setup-python@v5.3.0
+        uses: actions/setup-python@v6.2.0
         with:
           python-version: ${{ env.DEFAULT_PYTHON }}
 
       - name: Restore Python ${{ env.DEFAULT_PYTHON }} virtual environment
         id: cache-venv
-        uses: actions/cache/restore@v4.2.0
+        uses: actions/cache/restore@v5.0.5
         with:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run pytest
         timeout-minutes: 60
@@ -256,14 +260,14 @@ jobs:
 
       - name: Upload pytest output
         if: success() || failure() && steps.pytest.conclusion == 'failure'
-        uses: actions/upload-artifact@v4.6.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: pytest-${{ steps.python.outputs.python-version }}
           path: pytest-${{ steps.python.outputs.python-version }}.txt
           overwrite: true
 
       - name: Upload coverage artifact
-        uses: actions/upload-artifact@v4.6.0
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: coverage-${{ steps.python.outputs.python-version }}
           path: coverage.xml

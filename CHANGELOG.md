@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.1] - 2026-06-18
+
+### Changed
+
+- Bumped dev/test dependencies: `pytest-homeassistant-custom-component` to
+  `>=0.13.339` (tests now run against Home Assistant 2026.6.3), `mypy` to
+  `>=2.1.0`, `ruff` to `>=0.15.17`, and `pytest-mock` to `>=3.15.1`. Test-stack
+  floors were aligned with the versions pinned by
+  `pytest-homeassistant-custom-component`.
+
+### Fixed
+
+- Corrected the `pyproject.toml` package version, which had drifted to `2.0.0`.
+
 ## [2.1.0] - 2026-04-16
 
 ### Added
