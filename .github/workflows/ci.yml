@@ -70,7 +70,7 @@ jobs:
         with:
           path: venv
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Create Python virtual environment
         if: steps.cache-venv.outputs.cache-hit != 'true'
@@ -103,7 +103,7 @@ jobs:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run translations check
         run: |
@@ -170,7 +170,7 @@ jobs:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run ruff linting
         run: |
@@ -208,7 +208,7 @@ jobs:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run mypy
         run: |
@@ -241,7 +241,7 @@ jobs:
           path: venv
           fail-on-cache-miss: true
           key: >-
-            ${{ runner.os }}-${{ steps.python.outputs.python-version }}-venv-${{ needs.info.outputs.python_cache_key }}
+            ${{ runner.os }}-${{ env.DEFAULT_PYTHON }}-venv-${{ needs.info.outputs.python_cache_key }}
 
       - name: Run pytest
         timeout-minutes: 60
