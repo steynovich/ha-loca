@@ -15,7 +15,11 @@ on:
   workflow_dispatch:
 
 env:
-  DEFAULT_PYTHON: "3.14"
+  # Pin the full patch version: a cached venv hardcodes its interpreter path,
+  # so all jobs must resolve the identical Python build. GitHub's runner-image
+  # rollout otherwise hands different patches (e.g. 3.14.5 vs 3.14.6) to jobs in
+  # the same run, breaking venv cache restores. Bump deliberately.
+  DEFAULT_PYTHON: "3.14.6"
 
 jobs:
   info:
