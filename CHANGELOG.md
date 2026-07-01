@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.2] - 2026-07-01
+
+### Fixed
+
+- Removed the deprecated `battery_level` property from `LocaDeviceTracker`, which
+  triggered a Home Assistant deprecation warning (unsupported from HA 2027.7).
+  Battery level is already exposed via the dedicated `sensor.<device>_battery`
+  entity, so no functionality is lost.
+
 ## [2.1.1] - 2026-06-18
 
 ### Changed

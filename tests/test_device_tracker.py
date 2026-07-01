@@ -136,18 +136,6 @@ class TestLocaDeviceTracker:
             self.device_tracker.location_accuracy == 0
         )  # Returns 0 when accuracy is not available
 
-    def test_battery_level(self):
-        """Test battery_level property."""
-        self.mock_coordinator.data = {"test_device": {"battery_level": 85}}
-
-        assert self.device_tracker.battery_level == 85
-
-    def test_battery_level_missing(self):
-        """Test battery_level property when missing."""
-        self.mock_coordinator.data = {"test_device": {}}
-
-        assert self.device_tracker.battery_level is None
-
     def test_extra_state_attributes_full(self):
         """Test extra_state_attributes with all data."""
         test_datetime = datetime(2022, 1, 1, 12, 0, 0)
