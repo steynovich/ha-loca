@@ -69,8 +69,8 @@ The integration follows Home Assistant's standard architecture patterns:
 **Device Tracker**:
 - GPS coordinates with latitude/longitude
 - Zone detection (home/not_home)
-- Battery level as diagnostic attribute
 - Speed and accuracy attributes
+- Battery level exposed via the dedicated battery sensor (not the tracker; the deprecated `battery_level` tracker property was removed)
 
 **Sensors**:
 - Battery (diagnostic) - percentage with device class
