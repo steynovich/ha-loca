@@ -82,11 +82,6 @@ class LocaDeviceTracker(LocaEntityMixin, CoordinatorEntity, TrackerEntity):
         return int(accuracy)
 
     @property
-    def battery_level(self) -> int | None:
-        """Return the battery level of the device."""
-        return self.device_data.get("battery_level")
-
-    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the device state attributes."""
         attributes = {}
