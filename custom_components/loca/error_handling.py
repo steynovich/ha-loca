@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from functools import wraps
 import logging
-from typing import Any, TypeVar
 
 from aiohttp import ClientConnectorError, ServerTimeoutError
 
@@ -81,64 +78,6 @@ def log_connectivity_error(
         )
 
 
-T = TypeVar("T")
-P = TypeVar("P")
-
-
-def handle_api_errors(
-    default_return: Any = None, log_prefix: str = "API operation"
-) -> Callable[
-    [Callable[..., Awaitable[T]]],
-    Callable[..., Awaitable[T | Any]],
-]:
-    """Decorator for consistent API error handling."""
-
-    def decorator(
-        func: Callable[..., Awaitable[T]],
-    ) -> Callable[..., Awaitable[T | Any]]:
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T | Any:
-            try:
-                return await func(*args, **kwargs)
-            except Exception as err:
-                _LOGGER.exception(f"{log_prefix} failed: %s", err)
-                return default_return
-
-        return wrapper
-
-    return decorator
-
-
-def handle_config_flow_errors(
-    func: Callable[..., Awaitable[Any]],
-) -> Callable[..., Awaitable[Any]]:
-    """Decorator for consistent config flow error handling."""
-
-    @wraps(func)
-    async def wrapper(self: Any, user_input: dict[str, Any] | None = None) -> Any:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            try:
-                return await func(self, user_input)
-            except self.__class__.CannotConnect:
-                errors["base"] = "cannot_connect"
-            except self.__class__.InvalidAuth:
-                errors["base"] = "invalid_auth"
-            except Exception:
-                _LOGGER.exception("Unexpected exception in config flow")
-                errors["base"] = "unknown"
-
-            # Return form with errors
-            return self.async_show_form(
-                step_id=getattr(self, "_current_step", "user"),
-                data_schema=getattr(self, "_schema", {}),
-                errors=errors,
-            )
-        return await func(self, user_input)
-
-    return wrapper
-
-
 def sanitize_for_logging(value: str | None, show_length: bool = True) -> str:
     """Sanitize sensitive values for logging."""
     if not value:
@@ -146,26 +85,3 @@ def sanitize_for_logging(value: str | None, show_length: bool = True) -> str:
     if show_length:
         return f"***{len(value)} chars***"
     return "***"
-
-
-class ConfigFlowErrorMixin:
-    """Mixin to provide standardized config flow error handling."""
-
-    CannotConnect: type[Exception]
-    InvalidAuth: type[Exception]
-
-    def handle_validation_errors(
-        self,
-        validation_func: Callable[[dict[str, Any]], Any],
-        user_input: dict[str, Any],
-    ) -> dict[str, str] | Any:
-        """Handle validation with standardized error mapping."""
-        try:
-            return validation_func(user_input)
-        except self.CannotConnect:
-            return {"base": "cannot_connect"}
-        except self.InvalidAuth:
-            return {"base": "invalid_auth"}
-        except Exception:
-            _LOGGER.exception("Unexpected validation error")
-            return {"base": "unknown"}

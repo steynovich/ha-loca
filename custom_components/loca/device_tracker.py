@@ -50,18 +50,20 @@ class LocaDeviceTracker(LocaEntityMixin, CoordinatorEntity, TrackerEntity):
     """Representation of a Loca device tracker."""
 
     _attr_has_entity_name = True
+    _attr_translation_key = "default"
 
     def __init__(self, coordinator: LocaDataUpdateCoordinator, device_id: str) -> None:
         """Initialize the device tracker."""
         LocaEntityMixin.__init__(self, coordinator, device_id)
         CoordinatorEntity.__init__(self, coordinator)
         self._attr_unique_id = f"{DOMAIN}_{device_id}"
-        self._attr_name = None  # Use device name
+        # Main feature of the device: no own name, take the device name
+        self._attr_name = None
 
     @property
-    def name(self) -> str | None:
-        """Return the name of the device."""
-        return self.device_data.get("name", f"Loca Device {self._device_id}")
+    def available(self) -> bool:
+        """Return False when the device is no longer present in the API data."""
+        return super().available and self._device_id in (self.coordinator.data or {})
 
     @property
     def latitude(self) -> float | None:

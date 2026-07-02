@@ -18,6 +18,15 @@
           "username": "Gebruikersnaam",
           "password": "Wachtwoord"
         }
+      },
+      "reconfigure": {
+        "title": "Loca-account opnieuw configureren",
+        "description": "Werk de Loca API-inloggegevens voor {username} bij.",
+        "data": {
+          "api_key": "API key",
+          "username": "Gebruikersnaam",
+          "password": "Wachtwoord"
+        }
       }
     },
     "error": {
@@ -27,7 +36,9 @@
     },
     "abort": {
       "already_configured": "Account is al geconfigureerd",
-      "reauth_successful": "Herauthenticatie succesvol"
+      "reauth_successful": "Herauthenticatie succesvol",
+      "reconfigure_successful": "Opnieuw configureren geslaagd",
+      "account_mismatch": "De gebruikersnaam moet overeenkomen met het geconfigureerde account. Voeg een nieuwe integratie toe om een ander account te gebruiken."
     }
   },
   "options": {
@@ -62,11 +73,7 @@
         "name": "Locatie Update Configuratie"
       },
       "location": {
-        "name": "Locatie",
-        "state": {
-          "unknown_address": "Onbekend adres",
-          "unknown_location": "Onbekende locatie"
-        }
+        "name": "Locatie"
       }
     },
     "device_tracker": {

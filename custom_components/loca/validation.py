@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from .const import LocationConstants
-from .types import LocationEntry, StatusEntry
+from .types import LocationEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -20,27 +20,29 @@ class DataValidator:
 
     @staticmethod
     def validate_coordinates(latitude: float, longitude: float) -> tuple[float, float]:
-        """Validate GPS coordinates."""
+        """Validate GPS coordinates.
+
+        Error messages deliberately omit the coordinate values: they end up
+        in log output and exact GPS positions must never be logged.
+        """
         try:
             lat = float(latitude)
             lon = float(longitude)
         except (ValueError, TypeError) as err:
-            raise ValidationError(
-                f"Invalid coordinate values: {latitude}, {longitude}"
-            ) from err
+            raise ValidationError("Invalid coordinate values") from err
 
         if not (
             LocationConstants.MIN_LATITUDE <= lat <= LocationConstants.MAX_LATITUDE
         ):
             raise ValidationError(
-                f"Latitude {lat} out of valid range ({LocationConstants.MIN_LATITUDE}, {LocationConstants.MAX_LATITUDE})"
+                f"Latitude out of valid range ({LocationConstants.MIN_LATITUDE}, {LocationConstants.MAX_LATITUDE})"
             )
 
         if not (
             LocationConstants.MIN_LONGITUDE <= lon <= LocationConstants.MAX_LONGITUDE
         ):
             raise ValidationError(
-                f"Longitude {lon} out of valid range ({LocationConstants.MIN_LONGITUDE}, {LocationConstants.MAX_LONGITUDE})"
+                f"Longitude out of valid range ({LocationConstants.MIN_LONGITUDE}, {LocationConstants.MAX_LONGITUDE})"
             )
 
         return lat, lon
@@ -87,33 +89,6 @@ class DataValidator:
             return LocationConstants.DEFAULT_GPS_ACCURACY
 
     @staticmethod
-    def validate_status_entry(entry: dict[str, Any]) -> StatusEntry:
-        """Validate status entry structure."""
-        if not isinstance(entry, dict):
-            raise ValidationError("Status entry must be a dictionary")
-
-        # Check for required nested structures
-        asset = entry.get("Asset")
-        if not isinstance(asset, dict):
-            raise ValidationError("Status entry missing valid Asset data")
-
-        history = entry.get("History", {})
-        if not isinstance(history, dict):
-            _LOGGER.warning("Status entry missing History data")
-            history = {}
-
-        spot = entry.get("Spot", {})
-        if not isinstance(spot, dict):
-            _LOGGER.debug("Status entry missing Spot data")
-            spot = {}
-
-        return {
-            "Asset": asset,
-            "History": history,
-            "Spot": spot,
-        }
-
-    @staticmethod
     def validate_location_entry(entry: dict[str, Any]) -> LocationEntry:
         """Validate location entry structure."""
         if not isinstance(entry, dict):
@@ -153,10 +128,14 @@ class DataValidator:
     @classmethod
     def safe_validate_coordinates(
         cls, latitude: Any, longitude: Any
-    ) -> tuple[float, float]:
-        """Safely validate coordinates with fallback to (0,0)."""
+    ) -> tuple[float, float] | None:
+        """Safely validate coordinates, returning None when invalid.
+
+        None (rather than a (0,0) fallback) keeps trackers from reporting
+        Null Island as a live position.
+        """
         try:
             return cls.validate_coordinates(latitude, longitude)
         except ValidationError as err:
-            _LOGGER.warning("Coordinate validation failed, using (0,0): %s", err)
-            return 0.0, 0.0
+            _LOGGER.warning("Coordinate validation failed, location unknown: %s", err)
+            return None

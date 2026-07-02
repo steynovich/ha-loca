@@ -154,6 +154,69 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             description_placeholders={"username": existing_data.get(CONF_USERNAME, "")},
         )
 
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Handle reconfiguration of an existing entry (e.g. API key rotation)."""
+        errors: dict[str, str] = {}
+        entry = self._get_reconfigure_entry()
+
+        if user_input is not None:
+            try:
+                info = await validate_input(self.hass, user_input)
+            except CannotConnect:
+                errors["base"] = "cannot_connect"
+            except InvalidAuth:
+                errors["base"] = "invalid_auth"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during reconfiguration")
+                errors["base"] = "unknown"
+            else:
+                # The username identifies the account: reconfigure may rotate
+                # credentials but must not switch the entry to another account
+                if user_input[CONF_USERNAME] != entry.data[CONF_USERNAME]:
+                    return self.async_abort(reason="account_mismatch")
+
+                # The unique_id bakes in the API key hash, so recompute it and
+                # refuse to collide with a different entry
+                api_key_hash = hashlib.sha256(
+                    user_input[CONF_API_KEY].encode()
+                ).hexdigest()[:8]
+                new_unique_id = f"{user_input[CONF_USERNAME]}_{api_key_hash}"
+                if any(
+                    other.unique_id == new_unique_id
+                    and other.entry_id != entry.entry_id
+                    for other in self._async_current_entries()
+                ):
+                    return self.async_abort(reason="already_configured")
+
+                return self.async_update_reload_and_abort(
+                    entry,
+                    unique_id=new_unique_id,
+                    title=info["title"],
+                    data=user_input,
+                )
+
+        # Pre-fill form with existing data (except password)
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_API_KEY, default=entry.data.get(CONF_API_KEY, "")
+                ): str,
+                vol.Required(
+                    CONF_USERNAME, default=entry.data.get(CONF_USERNAME, "")
+                ): str,
+                vol.Required(CONF_PASSWORD): str,
+            }
+        )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"username": entry.data.get(CONF_USERNAME, "")},
+        )
+
     @staticmethod
     @callback
     def async_get_options_flow(

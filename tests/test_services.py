@@ -2,8 +2,9 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers.update_coordinator import UpdateFailed
 import pytest
 
@@ -62,6 +63,7 @@ class TestRefreshDevicesService:
         entry.domain = DOMAIN
         entry.runtime_data = mock_coordinator
         entry.entry_id = "test_entry_123"
+        entry.state = ConfigEntryState.LOADED
         return entry
 
     @pytest.mark.asyncio
@@ -73,19 +75,15 @@ class TestRefreshDevicesService:
         await async_setup_services(hass)
 
         # Mock config entries
-        with (
-            patch.object(
-                hass.config_entries, "async_get_entry", return_value=mock_config_entry
-            ),
-            patch(
-                "custom_components.loca.services.async_extract_config_entry_ids",
-                new_callable=AsyncMock,
-                return_value=["test_entry_123"],
-            ),
+        with patch.object(
+            hass.config_entries, "async_get_entry", return_value=mock_config_entry
         ):
             # Call the service
             await hass.services.async_call(
-                DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                DOMAIN,
+                SERVICE_REFRESH_DEVICES,
+                {"config_entry_id": "test_entry_123"},
+                blocking=True,
             )
 
             # Should refresh the coordinator
@@ -97,11 +95,7 @@ class TestRefreshDevicesService:
         # Setup services
         await async_setup_services(hass)
 
-        with patch(
-            "custom_components.loca.services.async_extract_config_entry_ids",
-            new_callable=AsyncMock,
-            return_value=[],
-        ):
+        with patch.object(hass.config_entries, "async_loaded_entries", return_value=[]):
             # Call the service - should raise ServiceValidationError
             with pytest.raises(
                 HomeAssistantError, match="No Loca config entries found"
@@ -116,20 +110,16 @@ class TestRefreshDevicesService:
         # Setup services
         await async_setup_services(hass)
 
-        with (
-            patch.object(hass.config_entries, "async_get_entry", return_value=None),
-            patch(
-                "custom_components.loca.services.async_extract_config_entry_ids",
-                new_callable=AsyncMock,
-                return_value=["invalid_entry"],
-            ),
-        ):
+        with patch.object(hass.config_entries, "async_get_entry", return_value=None):
             # Call the service - should raise error
             with pytest.raises(
                 HomeAssistantError, match="Config entry invalid_entry not found"
             ):
                 await hass.services.async_call(
-                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                    DOMAIN,
+                    SERVICE_REFRESH_DEVICES,
+                    {"config_entry_id": "invalid_entry"},
+                    blocking=True,
                 )
 
     @pytest.mark.asyncio
@@ -143,22 +133,117 @@ class TestRefreshDevicesService:
         # Make coordinator fail
         mock_coordinator.async_request_refresh.side_effect = Exception("Refresh failed")
 
-        with (
-            patch.object(
-                hass.config_entries, "async_get_entry", return_value=mock_config_entry
-            ),
-            patch(
-                "custom_components.loca.services.async_extract_config_entry_ids",
-                new_callable=AsyncMock,
-                return_value=["test_entry_123"],
-            ),
+        with patch.object(
+            hass.config_entries, "async_get_entry", return_value=mock_config_entry
         ):
             # Call the service - should raise HomeAssistantError
             with pytest.raises(
                 HomeAssistantError, match="Unexpected error refreshing devices"
             ):
                 await hass.services.async_call(
-                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                    DOMAIN,
+                    SERVICE_REFRESH_DEVICES,
+                    {"config_entry_id": "test_entry_123"},
+                    blocking=True,
+                )
+
+
+class TestRefreshDevicesTargeting:
+    """Test refresh_devices targeting without mocking the extraction helper.
+
+    Regression tests: the service must honor the documented config_entry_id
+    field and fall back to all loaded Loca entries when no field is given.
+    """
+
+    @pytest.fixture
+    def mock_loaded_entry(self):
+        """Create a mock loaded config entry with a refreshable coordinator."""
+        entry = MagicMock()
+        entry.domain = DOMAIN
+        entry.entry_id = "test_entry_123"
+        entry.state = ConfigEntryState.LOADED
+        entry.runtime_data = MagicMock(async_request_refresh=AsyncMock())
+        return entry
+
+    @pytest.mark.asyncio
+    async def test_refresh_with_config_entry_id(
+        self, hass: HomeAssistant, mock_loaded_entry
+    ):
+        """Test that the documented config_entry_id field targets the entry."""
+        await async_setup_services(hass)
+
+        with patch.object(
+            hass.config_entries, "async_get_entry", return_value=mock_loaded_entry
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_REFRESH_DEVICES,
+                {"config_entry_id": "test_entry_123"},
+                blocking=True,
+            )
+
+        mock_loaded_entry.runtime_data.async_request_refresh.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_without_data_refreshes_all_loaded_entries(
+        self, hass: HomeAssistant, mock_loaded_entry
+    ):
+        """Test that a call without fields refreshes every loaded Loca entry."""
+        await async_setup_services(hass)
+
+        with (
+            patch.object(
+                hass.config_entries,
+                "async_loaded_entries",
+                return_value=[mock_loaded_entry],
+            ),
+            patch.object(
+                hass.config_entries,
+                "async_get_entry",
+                return_value=mock_loaded_entry,
+            ),
+        ):
+            await hass.services.async_call(
+                DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+            )
+
+        mock_loaded_entry.runtime_data.async_request_refresh.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_refresh_with_unknown_config_entry_id(self, hass: HomeAssistant):
+        """Test that an unknown config_entry_id raises a clear validation error."""
+        await async_setup_services(hass)
+
+        with patch.object(hass.config_entries, "async_get_entry", return_value=None):
+            with pytest.raises(ServiceValidationError, match="bogus_entry not found"):
+                await hass.services.async_call(
+                    DOMAIN,
+                    SERVICE_REFRESH_DEVICES,
+                    {"config_entry_id": "bogus_entry"},
+                    blocking=True,
+                )
+
+    @pytest.mark.asyncio
+    async def test_refresh_not_loaded_entry_gives_clear_error(
+        self, hass: HomeAssistant
+    ):
+        """Test that targeting a not-loaded entry raises a clear error."""
+        await async_setup_services(hass)
+
+        entry = MagicMock()
+        entry.domain = DOMAIN
+        entry.entry_id = "retry_entry"
+        entry.state = ConfigEntryState.SETUP_RETRY
+        # A not-loaded entry has no runtime_data attribute at all
+        del entry.runtime_data
+
+        with patch.object(hass.config_entries, "async_get_entry", return_value=entry):
+            with pytest.raises(ServiceValidationError, match="not loaded"):
+                await hass.services.async_call(
+                    DOMAIN,
+                    SERVICE_REFRESH_DEVICES,
+                    {"config_entry_id": "retry_entry"},
+                    blocking=True,
                 )
 
 
@@ -186,6 +271,7 @@ class TestForceUpdateService:
         entry = MagicMock()
         entry.domain = DOMAIN
         entry.runtime_data = mock_coordinator_with_device
+        entry.state = ConfigEntryState.LOADED
         return entry
 
     @pytest.mark.asyncio
@@ -214,6 +300,37 @@ class TestForceUpdateService:
             mock_coordinator_with_device.async_request_refresh.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_force_update_skips_not_loaded_entries(
+        self,
+        hass: HomeAssistant,
+        mock_config_entry_with_device,
+        mock_coordinator_with_device,
+    ):
+        """Test that a not-loaded entry is skipped instead of crashing the call."""
+        await async_setup_services(hass)
+
+        broken_entry = MagicMock()
+        broken_entry.domain = DOMAIN
+        broken_entry.state = ConfigEntryState.SETUP_RETRY
+        # A not-loaded entry has no runtime_data attribute at all
+        del broken_entry.runtime_data
+        mock_config_entry_with_device.state = ConfigEntryState.LOADED
+
+        with patch.object(
+            hass.config_entries,
+            "async_entries",
+            return_value=[broken_entry, mock_config_entry_with_device],
+        ):
+            await hass.services.async_call(
+                DOMAIN,
+                SERVICE_FORCE_UPDATE,
+                {"device_id": "test_device_123"},
+                blocking=True,
+            )
+
+        mock_coordinator_with_device.async_request_refresh.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_force_update_device_not_found(self, hass: HomeAssistant):
         """Test force update when device not found."""
         # Setup services
@@ -226,6 +343,7 @@ class TestForceUpdateService:
         entry = MagicMock()
         entry.domain = DOMAIN
         entry.runtime_data = coordinator
+        entry.state = ConfigEntryState.LOADED
 
         with patch.object(hass.config_entries, "async_entries", return_value=[entry]):
             # Call the service - should raise error
@@ -296,11 +414,13 @@ class TestForceUpdateService:
         entry1 = MagicMock()
         entry1.domain = DOMAIN
         entry1.runtime_data = coordinator1
+        entry1.state = ConfigEntryState.LOADED
 
         # Second entry with the device
         entry2 = MagicMock()
         entry2.domain = DOMAIN
         entry2.runtime_data = mock_coordinator_with_device
+        entry2.state = ConfigEntryState.LOADED
 
         with patch.object(
             hass.config_entries, "async_entries", return_value=[entry1, entry2]
@@ -423,6 +543,7 @@ class TestServiceSpecificErrors:
         entry.domain = DOMAIN
         entry.runtime_data = mock_coordinator_with_device
         entry.entry_id = "test_entry_123"
+        entry.state = ConfigEntryState.LOADED
         return entry
 
     @pytest.mark.asyncio
@@ -439,21 +560,17 @@ class TestServiceSpecificErrors:
             LocaAPIUnavailableError("API temporarily unavailable")
         )
 
-        with (
-            patch.object(
-                hass.config_entries,
-                "async_get_entry",
-                return_value=mock_config_entry_with_device,
-            ),
-            patch(
-                "custom_components.loca.services.async_extract_config_entry_ids",
-                new_callable=AsyncMock,
-                return_value=["test_entry_123"],
-            ),
+        with patch.object(
+            hass.config_entries,
+            "async_get_entry",
+            return_value=mock_config_entry_with_device,
         ):
             with pytest.raises(HomeAssistantError) as exc_info:
                 await hass.services.async_call(
-                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                    DOMAIN,
+                    SERVICE_REFRESH_DEVICES,
+                    {"config_entry_id": "test_entry_123"},
+                    blocking=True,
                 )
 
             assert "temporarily unavailable" in str(exc_info.value)
@@ -472,21 +589,17 @@ class TestServiceSpecificErrors:
             "Failed to communicate with API"
         )
 
-        with (
-            patch.object(
-                hass.config_entries,
-                "async_get_entry",
-                return_value=mock_config_entry_with_device,
-            ),
-            patch(
-                "custom_components.loca.services.async_extract_config_entry_ids",
-                new_callable=AsyncMock,
-                return_value=["test_entry_123"],
-            ),
+        with patch.object(
+            hass.config_entries,
+            "async_get_entry",
+            return_value=mock_config_entry_with_device,
         ):
             with pytest.raises(HomeAssistantError) as exc_info:
                 await hass.services.async_call(
-                    DOMAIN, SERVICE_REFRESH_DEVICES, {}, blocking=True
+                    DOMAIN,
+                    SERVICE_REFRESH_DEVICES,
+                    {"config_entry_id": "test_entry_123"},
+                    blocking=True,
                 )
 
             assert "Failed to refresh devices" in str(exc_info.value)
@@ -559,6 +672,7 @@ class TestServiceSpecificErrors:
         entry = MagicMock()
         entry.domain = DOMAIN
         entry.runtime_data = coordinator
+        entry.state = ConfigEntryState.LOADED
 
         with patch.object(hass.config_entries, "async_entries", return_value=[entry]):
             call_data = {"device_id": "test_device"}

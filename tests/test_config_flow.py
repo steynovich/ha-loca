@@ -492,6 +492,187 @@ class TestReauthFlow:
         assert result2["errors"] == {"base": "unknown"}
 
 
+class TestReconfigureFlow:
+    """Test the reconfigure flow."""
+
+    def _make_entry(self) -> MockConfigEntry:
+        return MockConfigEntry(
+            domain=DOMAIN,
+            title="Loca (test_user)",
+            unique_id="test_user_e105ba86",  # sha256("old_key")[:8]
+            data={
+                CONF_API_KEY: "old_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "old_pass",
+            },
+        )
+
+    async def test_reconfigure_shows_form(self, hass: HomeAssistant) -> None:
+        """Test the reconfigure step shows the credentials form."""
+        entry = self._make_entry()
+        entry.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+
+        assert result["type"] is FlowResultType.FORM
+        assert result["step_id"] == "reconfigure"
+
+    async def test_reconfigure_success_rotates_api_key(
+        self, hass: HomeAssistant, expected_lingering_tasks
+    ) -> None:
+        """Test reconfigure updates credentials and recomputes the unique_id."""
+        import hashlib
+
+        entry = self._make_entry()
+        entry.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+
+        with (
+            patch(
+                "custom_components.loca.config_flow.validate_input",
+                return_value={"title": "Loca (test_user)"},
+            ),
+            patch(
+                "custom_components.loca.async_setup_entry",
+                return_value=True,
+            ),
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+            await hass.async_block_till_done()
+
+        assert result2["type"] is FlowResultType.ABORT
+        assert result2["reason"] == "reconfigure_successful"
+        assert entry.data[CONF_API_KEY] == "new_key"
+        assert entry.data[CONF_PASSWORD] == "new_pass"
+        expected_hash = hashlib.sha256(b"new_key").hexdigest()[:8]
+        assert entry.unique_id == f"test_user_{expected_hash}"
+
+    async def test_reconfigure_invalid_auth_shows_error(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Test invalid credentials re-show the form with an error."""
+        entry = self._make_entry()
+        entry.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            side_effect=InvalidAuth,
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "bad_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "bad_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.FORM
+        assert result2["errors"] == {"base": "invalid_auth"}
+
+    async def test_reconfigure_cannot_connect_shows_error(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Test connectivity problems re-show the form with an error."""
+        entry = self._make_entry()
+        entry.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            side_effect=CannotConnect,
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.FORM
+        assert result2["errors"] == {"base": "cannot_connect"}
+
+    async def test_reconfigure_username_change_aborts(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Test reconfigure refuses to switch the entry to another account."""
+        entry = self._make_entry()
+        entry.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            return_value={"title": "Loca (other_user)"},
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "other_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.ABORT
+        assert result2["reason"] == "account_mismatch"
+        assert entry.data[CONF_API_KEY] == "old_key"
+
+    async def test_reconfigure_collides_with_other_entry(
+        self, hass: HomeAssistant
+    ) -> None:
+        """Test reconfigure aborts when the new unique_id belongs to another entry."""
+        import hashlib
+
+        entry = self._make_entry()
+        entry.add_to_hass(hass)
+
+        colliding_hash = hashlib.sha256(b"new_key").hexdigest()[:8]
+        other = MockConfigEntry(
+            domain=DOMAIN,
+            title="Loca (test_user) 2",
+            unique_id=f"test_user_{colliding_hash}",
+            data={
+                CONF_API_KEY: "new_key",
+                CONF_USERNAME: "test_user",
+                CONF_PASSWORD: "other_pass",
+            },
+        )
+        other.add_to_hass(hass)
+
+        result = await entry.start_reconfigure_flow(hass)
+
+        with patch(
+            "custom_components.loca.config_flow.validate_input",
+            return_value={"title": "Loca (test_user)"},
+        ):
+            result2 = await hass.config_entries.flow.async_configure(
+                result["flow_id"],
+                {
+                    CONF_API_KEY: "new_key",
+                    CONF_USERNAME: "test_user",
+                    CONF_PASSWORD: "new_pass",
+                },
+            )
+
+        assert result2["type"] is FlowResultType.ABORT
+        assert result2["reason"] == "already_configured"
+        assert entry.data[CONF_API_KEY] == "old_key"
+
+
 class TestConfigFlowOptions:
     """Test config flow options."""
 

@@ -18,6 +18,15 @@
           "username": "Nome de usuário",
           "password": "Senha"
         }
+      },
+      "reconfigure": {
+        "title": "Reconfigurar a conta Loca",
+        "description": "Atualize as credenciais da API Loca para {username}.",
+        "data": {
+          "api_key": "API key",
+          "username": "Nome de usuário",
+          "password": "Senha"
+        }
       }
     },
     "error": {
@@ -27,7 +36,9 @@
     },
     "abort": {
       "already_configured": "Conta já está configurada",
-      "reauth_successful": "Reautenticação bem-sucedida"
+      "reauth_successful": "Reautenticação bem-sucedida",
+      "reconfigure_successful": "Reconfiguração bem-sucedida",
+      "account_mismatch": "O nome de utilizador deve corresponder à conta configurada. Para usar outra conta, adicione uma nova entrada de integração."
     }
   },
   "options": {
@@ -62,11 +73,7 @@
         "name": "Configuração atualização localização"
       },
       "location": {
-        "name": "Localização",
-        "state": {
-          "unknown_address": "Endereço desconhecido",
-          "unknown_location": "Localização desconhecida"
-        }
+        "name": "Localização"
       }
     },
     "device_tracker": {

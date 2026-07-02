@@ -54,6 +54,74 @@ class TestAsyncSetupEntry:
         assert len(entities) == 0
 
 
+class TestFriendlyNames:
+    """Full-setup regression tests for entity naming.
+
+    The tracker used to render "My Car My Car" (device name duplicated) and
+    sensors were hardcoded English instead of using the translation catalog.
+    """
+
+    @pytest.mark.asyncio
+    async def test_friendly_names_via_state_machine(self, hass: HomeAssistant):
+        """Test tracker takes the device name and sensors get catalog names."""
+        from unittest.mock import patch
+
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        from custom_components.loca.const import CONF_API_KEY
+
+        entry = MockConfigEntry(
+            domain=DOMAIN,
+            title="Test Loca",
+            data={
+                CONF_API_KEY: "test_api_key",
+                "username": "test_user",
+                "password": "test_password",
+            },
+            unique_id="test_user_deadbeef",
+        )
+        entry.add_to_hass(hass)
+
+        status_list = [
+            {
+                "Asset": {"id": "12345", "label": "My Car"},
+                "History": {"latitude": 52.3676, "longitude": 4.9041, "charge": 85},
+                "Spot": None,
+            }
+        ]
+
+        with (
+            patch(
+                "custom_components.loca.api.LocaAPI.authenticate",
+                return_value=True,
+            ),
+            patch(
+                "custom_components.loca.api.LocaAPI.update_groups_cache",
+                return_value=None,
+            ),
+            patch(
+                "custom_components.loca.api.LocaAPI.get_status_list",
+                return_value=status_list,
+            ),
+            patch("custom_components.loca.api.LocaAPI.close", return_value=None),
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+            tracker_state = hass.states.get("device_tracker.my_car")
+            assert tracker_state is not None
+            # Regression: was "My Car My Car" with the name property override
+            assert tracker_state.attributes["friendly_name"] == "My Car"
+
+            battery_state = hass.states.get("sensor.my_car_battery")
+            assert battery_state is not None
+            assert battery_state.attributes["friendly_name"] == "My Car Battery"
+            assert battery_state.state == "85"
+
+            await hass.config_entries.async_unload(entry.entry_id)
+            await hass.async_block_till_done()
+
+
 class TestLocaDeviceTracker:
     """Test the LocaDeviceTracker entity."""
 
@@ -86,17 +154,37 @@ class TestLocaDeviceTracker:
 
         assert self.device_tracker.device_data == {}
 
-    def test_name_with_device_name(self):
-        """Test name property with device name."""
+    def test_tracker_takes_device_name(self):
+        """Test the tracker uses the main-feature naming pattern.
+
+        Regression test: a `name` property override combined with
+        has_entity_name produced duplicated friendly names ("My Car My Car").
+        """
+        assert "name" not in LocaDeviceTracker.__dict__
+        assert self.device_tracker._attr_name is None
+        assert self.device_tracker._attr_has_entity_name is True
+
+    def test_tracker_has_translation_key(self):
+        """Test the tracker declares the translation key used by icons.json."""
+        assert self.device_tracker._attr_translation_key == "default"
+
+    def test_available_when_device_in_coordinator_data(self):
+        """Test tracker is available while its device is in coordinator data."""
         self.mock_coordinator.data = {"test_device": {"name": "My GPS Tracker"}}
+        self.mock_coordinator.last_update_success = True
 
-        assert self.device_tracker.name == "My GPS Tracker"
+        assert self.device_tracker.available is True
 
-    def test_name_without_device_name(self):
-        """Test name property without device name."""
-        self.mock_coordinator.data = {"test_device": {}}
+    def test_unavailable_when_device_disappears(self):
+        """Test tracker becomes unavailable when its device leaves the API.
 
-        assert self.device_tracker.name == "Loca Device test_device"
+        Regression test: without an `available` override the tracker kept
+        reporting the last known coordinates as live forever.
+        """
+        self.mock_coordinator.data = {"other_device": {}}
+        self.mock_coordinator.last_update_success = True
+
+        assert self.device_tracker.available is False
 
     def test_latitude(self):
         """Test latitude property."""

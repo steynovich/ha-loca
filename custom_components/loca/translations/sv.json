@@ -18,6 +18,15 @@
           "username": "Användarnamn",
           "password": "Lösenord"
         }
+      },
+      "reconfigure": {
+        "title": "Konfigurera om Loca-kontot",
+        "description": "Uppdatera Loca API-uppgifterna för {username}.",
+        "data": {
+          "api_key": "API key",
+          "username": "Användarnamn",
+          "password": "Lösenord"
+        }
       }
     },
     "error": {
@@ -27,7 +36,9 @@
     },
     "abort": {
       "already_configured": "Kontot är redan konfigurerat",
-      "reauth_successful": "Återautentisering lyckades"
+      "reauth_successful": "Återautentisering lyckades",
+      "reconfigure_successful": "Omkonfigurering lyckades",
+      "account_mismatch": "Användarnamnet måste matcha det konfigurerade kontot. Lägg till en ny integrationspost för att använda ett annat konto."
     }
   },
   "options": {
@@ -62,11 +73,7 @@
         "name": "Konfiguration positionsuppdatering"
       },
       "location": {
-        "name": "Position",
-        "state": {
-          "unknown_address": "Okänd adress",
-          "unknown_location": "Okänd position"
-        }
+        "name": "Position"
       }
     },
     "device_tracker": {

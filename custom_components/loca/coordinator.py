@@ -128,8 +128,20 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
         """Parse StatusList entries into device records and emit add/remove logs."""
         devices: dict[str, Any] = {}
         for status_entry in status_list:
-            device_data = self.api.parse_status_as_device(status_entry)
+            # Isolate per-entry parse failures so one malformed device does
+            # not abort tracking for the whole account.
+            try:
+                device_data = self.api.parse_status_as_device(status_entry)
+            except Exception:
+                _LOGGER.warning(
+                    "Skipping malformed status entry in Loca response",
+                    exc_info=True,
+                )
+                continue
             device_id = device_data["device_id"]
+            if not device_id:
+                _LOGGER.warning("Skipping status entry without a device id")
+                continue
             devices[device_id] = device_data
 
             if self.data and device_id not in self.data:
@@ -143,8 +155,9 @@ class LocaDataUpdateCoordinator(DataUpdateCoordinator):
         _LOGGER.debug("Updated data for %s devices", len(devices))
 
         if devices:
-            async_delete_api_auth_issue(self.hass)
-            async_delete_no_devices_issue(self.hass)
+            if self.config_entry is not None:
+                async_delete_api_auth_issue(self.hass, self.config_entry)
+                async_delete_no_devices_issue(self.hass, self.config_entry)
             self._empty_device_count = 0
 
         return devices

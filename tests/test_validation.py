@@ -91,31 +91,54 @@ class TestValidateCoordinates:
 
 
 class TestSafeValidateCoordinates:
-    """Test safe coordinate validation with fallback."""
+    """Test safe coordinate validation with None fallback."""
 
     def test_valid_coordinates(self) -> None:
         """Test safe validation of valid coordinates."""
-        lat, lon = DataValidator.safe_validate_coordinates(52.3676, 4.9041)
-        assert lat == 52.3676
-        assert lon == 4.9041
+        coords = DataValidator.safe_validate_coordinates(52.3676, 4.9041)
+        assert coords == (52.3676, 4.9041)
 
-    def test_invalid_coordinates_fallback(self) -> None:
-        """Test fallback to (0,0) for invalid coordinates."""
-        lat, lon = DataValidator.safe_validate_coordinates(100, 200)
-        assert lat == 0.0
-        assert lon == 0.0
+    def test_invalid_coordinates_return_none(self) -> None:
+        """Test None is returned for out-of-range coordinates.
 
-    def test_none_coordinates_fallback(self) -> None:
-        """Test fallback to (0,0) for None coordinates."""
-        lat, lon = DataValidator.safe_validate_coordinates(None, None)
-        assert lat == 0.0
-        assert lon == 0.0
+        Regression test: the old (0,0) fallback made trackers report Null
+        Island as a live position instead of an unknown location.
+        """
+        assert DataValidator.safe_validate_coordinates(100, 200) is None
 
-    def test_invalid_type_fallback(self) -> None:
-        """Test fallback to (0,0) for invalid type."""
-        lat, lon = DataValidator.safe_validate_coordinates("invalid", "invalid")
-        assert lat == 0.0
-        assert lon == 0.0
+    def test_none_coordinates_return_none(self) -> None:
+        """Test None is returned for None coordinates."""
+        assert DataValidator.safe_validate_coordinates(None, None) is None
+
+    def test_invalid_type_returns_none(self) -> None:
+        """Test None is returned for unparsable coordinate types."""
+        assert DataValidator.safe_validate_coordinates("invalid", "invalid") is None
+
+    def test_out_of_range_values_not_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test exact coordinate values never reach the logs.
+
+        Regression test: validation errors used to interpolate the raw
+        latitude/longitude into WARNING-level log messages.
+        """
+        import logging
+
+        with caplog.at_level(logging.DEBUG):
+            DataValidator.safe_validate_coordinates(95.1234567, 4.7654321)
+        assert "95.1234567" not in caplog.text
+        assert "4.7654321" not in caplog.text
+
+    def test_unparsable_values_not_logged(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test unparsable coordinate inputs never reach the logs."""
+        import logging
+
+        with caplog.at_level(logging.DEBUG):
+            DataValidator.safe_validate_coordinates("52.11111x", "4.22222y")
+        assert "52.11111" not in caplog.text
+        assert "4.22222" not in caplog.text
 
 
 class TestValidateBatteryLevel:
@@ -224,50 +247,6 @@ class TestValidateDeviceId:
         with pytest.raises(ValidationError) as exc_info:
             DataValidator.validate_device_id("   ")
         assert "cannot be blank" in str(exc_info.value)
-
-
-class TestValidateStatusEntry:
-    """Test status entry validation."""
-
-    def test_valid_status_entry(self) -> None:
-        """Test validation of valid status entry."""
-        entry = {
-            "Asset": {"id": "12345", "label": "Test"},
-            "History": {"latitude": 52.0, "longitude": 4.0},
-            "Spot": {"city": "Amsterdam"},
-        }
-        result = DataValidator.validate_status_entry(entry)
-        assert result["Asset"]["id"] == "12345"
-        assert result["History"]["latitude"] == 52.0
-        assert result["Spot"]["city"] == "Amsterdam"
-
-    def test_status_entry_missing_history(self) -> None:
-        """Test validation with missing History."""
-        entry = {
-            "Asset": {"id": "12345"},
-        }
-        result = DataValidator.validate_status_entry(entry)
-        assert result["Asset"]["id"] == "12345"
-        assert result["History"] == {}
-        assert result["Spot"] == {}
-
-    def test_status_entry_not_dict(self) -> None:
-        """Test rejection of non-dict status entry."""
-        with pytest.raises(ValidationError) as exc_info:
-            DataValidator.validate_status_entry("not a dict")  # type: ignore[arg-type]
-        assert "must be a dictionary" in str(exc_info.value)
-
-    def test_status_entry_missing_asset(self) -> None:
-        """Test rejection of status entry without Asset."""
-        with pytest.raises(ValidationError) as exc_info:
-            DataValidator.validate_status_entry({"History": {}})
-        assert "missing valid Asset data" in str(exc_info.value)
-
-    def test_status_entry_asset_not_dict(self) -> None:
-        """Test rejection of status entry with non-dict Asset."""
-        with pytest.raises(ValidationError) as exc_info:
-            DataValidator.validate_status_entry({"Asset": "not a dict"})
-        assert "missing valid Asset data" in str(exc_info.value)
 
 
 class TestValidateLocationEntry:

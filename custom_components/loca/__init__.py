@@ -42,15 +42,16 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if coordinator:
             await coordinator.async_shutdown()
 
-        # Unload services if this is the last config entry being unloaded.
-        # The entry being unloaded is still reported as "loaded" at this point,
-        # so <= 1 means we are the only remaining loaded entry.
+        # Unload services only when no OTHER entry is still loaded. During a
+        # real unload HA has already moved this entry to UNLOAD_IN_PROGRESS,
+        # while in the direct reload path it is still LOADED — filtering by
+        # entry_id handles both.
         remaining_entries = [
             e
-            for e in hass.config_entries.async_entries(DOMAIN)
-            if e.state.value == "loaded"
+            for e in hass.config_entries.async_loaded_entries(DOMAIN)
+            if e.entry_id != entry.entry_id
         ]
-        if len(remaining_entries) <= 1:
+        if not remaining_entries:
             await async_unload_services(hass)
 
     return unload_ok

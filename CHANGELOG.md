@@ -5,6 +5,59 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-07-02
+
+### Added
+
+- **Reconfigure flow** — the integration can now be reconfigured from the UI
+  (Settings → Integrations → Reconfigure) to rotate the API key or update the
+  password without removing and re-adding the entry. Changing the username is
+  rejected; add a separate entry for a different account.
+
+### Fixed
+
+- **`loca.refresh_devices` never worked as documented** — the handler ignored
+  the `config_entry_id` field entirely and always failed with "No Loca config
+  entries found". The field is now honored, and calls without it refresh every
+  loaded Loca entry.
+- **Multi-account service unregistration** — unloading one of two config
+  entries removed the `loca.refresh_devices`/`loca.force_update` services even
+  though the other account was still loaded.
+- **Repair issues are now scoped per config entry** — previously one account's
+  successful poll silently dismissed another account's active
+  authentication-failure repair issue. Existing open repair issues will be
+  recreated under the new per-entry IDs.
+- **One malformed device no longer breaks the whole account** — an explicit
+  JSON `null` in a status entry's `History`/`Asset`/`Spot` sections raised an
+  error that aborted the entire poll; such entries are now normalized, and any
+  unparseable entry is skipped with a warning instead of failing the update.
+- **Exact GPS coordinates and street addresses no longer appear in logs**
+  (coordinate-validation warnings and debug payload dumps).
+- **Device tracker availability** — the tracker now becomes `unavailable` when
+  its device disappears from the API instead of showing the last known
+  location as live. Invalid coordinates now yield an unknown location instead
+  of (0, 0) ("Null Island").
+- Services now report a clear error when a config entry is not loaded instead
+  of an internal `runtime_data` attribute error.
+- Empty-device repair threshold aligned with documentation (3 consecutive
+  empty polls, was 2).
+
+### Changed
+
+- **Entity names are now translated** — sensors and the device tracker use
+  Home Assistant translation keys, so entity names follow the user's language
+  in all 9 supported locales. The tracker also no longer duplicates the device
+  name in its friendly name ("My Car My Car" → "My Car").
+- **BREAKING**: the Location sensor reports `unknown` instead of the literal
+  string `"Unknown location"` when no address is available. Automations
+  comparing against that string should use `has_value()` or compare with
+  `unknown`.
+- Speed and accuracy sensors now declare proper device classes
+  (`speed`/`distance`), enabling Home Assistant unit conversion. The battery
+  sensor icon now scales with the battery level.
+- Removed unused internal error-handling decorators and the unused
+  `validate_status_entry` helper.
+
 ## [2.1.2] - 2026-07-01
 
 ### Fixed

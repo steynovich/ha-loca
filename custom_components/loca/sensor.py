@@ -11,9 +11,8 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfLength, UnitOfSpeed
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -23,55 +22,52 @@ from .coordinator import LocaDataUpdateCoordinator
 
 PARALLEL_UPDATES = 0
 
+# Names and static icons come from the translation catalogs
+# (translations/*.json and icons.json) via translation_key.
 SENSOR_TYPES = {
     "battery": SensorEntityDescription(
         key="battery",
-        name="Battery",
+        translation_key="battery",
         native_unit_of_measurement=PERCENTAGE,
         device_class=SensorDeviceClass.BATTERY,
         state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:battery",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     "last_seen": SensorEntityDescription(
         key="last_seen",
-        name="Last Seen",
+        translation_key="last_seen",
         device_class=SensorDeviceClass.TIMESTAMP,
-        icon="mdi:clock-outline",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     "location_accuracy": SensorEntityDescription(
         key="location_accuracy",
-        name="Location Accuracy",
-        native_unit_of_measurement="m",
+        translation_key="location_accuracy",
+        native_unit_of_measurement=UnitOfLength.METERS,
+        device_class=SensorDeviceClass.DISTANCE,
         state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:crosshairs-gps",
         entity_category=EntityCategory.DIAGNOSTIC,
         entity_registry_enabled_default=False,  # Disable by default (noisy)
     ),
     "asset_info": SensorEntityDescription(
         key="asset_info",
-        name="Asset Information",
-        icon="mdi:information-outline",
+        translation_key="asset_info",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     "speed": SensorEntityDescription(
         key="speed",
-        name="Speed",
-        native_unit_of_measurement="km/h",
+        translation_key="speed",
+        native_unit_of_measurement=UnitOfSpeed.KILOMETERS_PER_HOUR,
+        device_class=SensorDeviceClass.SPEED,
         state_class=SensorStateClass.MEASUREMENT,
-        icon="mdi:speedometer",
     ),
     "location_update": SensorEntityDescription(
         key="location_update",
-        name="Location Update Config",
-        icon="mdi:update",
+        translation_key="location_update",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     "location": SensorEntityDescription(
         key="location",
-        name="Location",
-        icon="mdi:home-map-marker",
+        translation_key="location",
     ),
 }
 
@@ -127,15 +123,8 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
         self._sensor_type = sensor_type
         self.entity_description = SENSOR_TYPES[sensor_type]
         self._attr_unique_id = f"{DOMAIN}_{device_id}_{sensor_type}"
-        # Entity name is handled by entity_description
-
-    @property
-    def name(self) -> str | None:
-        """Return the name of the sensor."""
-        name = self.entity_description.name
-        if name is None or name == "":
-            return None
-        return str(name)
+        # Entity name resolves from the translation catalog via
+        # entity_description.translation_key
 
     @property
     def native_value(self) -> Any:
@@ -159,9 +148,9 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
             return "Not configured"
         return "Always on" if location_update.get("always", 0) == 1 else "Scheduled"
 
-    def _native_value_location(self) -> str:
-        """Return the formatted address or the unknown-location fallback."""
-        return self.device_data.get("address") or "Unknown location"
+    def _native_value_location(self) -> str | None:
+        """Return the formatted address, or None so the state reads unknown."""
+        return self.device_data.get("address") or None
 
     def _get_last_seen_attributes(self) -> dict[str, Any]:
         """Get attributes for last_seen sensor."""
@@ -312,15 +301,12 @@ class LocaSensor(LocaEntityMixin, CoordinatorEntity, SensorEntity):
 
     @property
     def icon(self) -> str | None:
-        """Return the icon for the sensor."""
-        # For asset_info sensor, use dynamic icon based on asset type
+        """Return a dynamic icon for asset_info; others use icons.json."""
         if self._sensor_type == "asset_info":
             asset_info = self.device_data.get("asset_info", {})
             asset_type = asset_info.get("type", 0)
             return LOCA_ASSET_TYPE_ICONS.get(asset_type, "mdi:radar")
-
-        # For other sensors, use the default icon from entity description
-        return self.entity_description.icon
+        return None
 
     @property
     def available(self) -> bool:

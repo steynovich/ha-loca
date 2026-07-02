@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 import pytest
@@ -174,6 +175,75 @@ class TestAsyncUnloadEntry:
 
             assert result is True
             mock_coordinator.async_shutdown.assert_called_once()
+
+
+class TestServiceUnregistrationOnUnload:
+    """Test that services survive as long as another entry is still loaded.
+
+    Regression tests: during a real unload HA has already moved the entry to
+    UNLOAD_IN_PROGRESS, so it must not be counted as a remaining loaded entry.
+    """
+
+    def _make_entry(self, entry_id: str, state: ConfigEntryState) -> MagicMock:
+        entry = MagicMock()
+        entry.domain = DOMAIN
+        entry.entry_id = entry_id
+        entry.state = state
+        entry.runtime_data = AsyncMock()
+        return entry
+
+    @pytest.mark.asyncio
+    async def test_unload_keeps_services_while_other_entry_loaded(
+        self, hass: HomeAssistant
+    ):
+        """Test unloading one of two entries keeps services registered."""
+        from custom_components.loca.services import async_setup_services
+
+        await async_setup_services(hass)
+
+        unloading = self._make_entry("entry_a", ConfigEntryState.UNLOAD_IN_PROGRESS)
+        other = self._make_entry("entry_b", ConfigEntryState.LOADED)
+
+        with (
+            patch.object(
+                hass.config_entries, "async_unload_platforms", return_value=True
+            ),
+            patch.object(
+                hass.config_entries, "async_loaded_entries", return_value=[other]
+            ),
+            patch.object(
+                hass.config_entries,
+                "async_entries",
+                return_value=[unloading, other],
+            ),
+        ):
+            assert await async_unload_entry(hass, unloading) is True
+
+        assert hass.services.has_service(DOMAIN, "refresh_devices")
+        assert hass.services.has_service(DOMAIN, "force_update")
+
+    @pytest.mark.asyncio
+    async def test_unload_last_entry_removes_services(self, hass: HomeAssistant):
+        """Test unloading the final entry unregisters the services."""
+        from custom_components.loca.services import async_setup_services
+
+        await async_setup_services(hass)
+
+        unloading = self._make_entry("entry_a", ConfigEntryState.UNLOAD_IN_PROGRESS)
+
+        with (
+            patch.object(
+                hass.config_entries, "async_unload_platforms", return_value=True
+            ),
+            patch.object(hass.config_entries, "async_loaded_entries", return_value=[]),
+            patch.object(
+                hass.config_entries, "async_entries", return_value=[unloading]
+            ),
+        ):
+            assert await async_unload_entry(hass, unloading) is True
+
+        assert not hass.services.has_service(DOMAIN, "refresh_devices")
+        assert not hass.services.has_service(DOMAIN, "force_update")
 
 
 class TestAsyncRemoveConfigEntryDevice:
