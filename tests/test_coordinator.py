@@ -111,6 +111,39 @@ class TestLocaDataUpdateCoordinator:
             assert "Test Street 42" in device["address"]
 
     @pytest.mark.asyncio
+    async def test_one_malformed_entry_does_not_abort_poll(
+        self, hass: HomeAssistant, mock_config_entry
+    ):
+        """Test a single unparseable status entry is skipped, not fatal.
+
+        Regression test: a per-entry parse failure used to raise out of the
+        loop and abort tracking for every device on the account.
+        """
+        coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)
+
+        malformed: dict = {"Asset": {"id": "bad1"}, "History": "garbage", "Spot": None}
+        empty_id: dict = {"Asset": {}, "History": None, "Spot": None}
+        good: dict = {
+            "Asset": {"id": "good1", "label": "Good Device"},
+            "History": {"latitude": 52.0, "longitude": 4.0},
+            "Spot": None,
+        }
+
+        with (
+            patch.object(coordinator.api, "_authenticated", True),
+            patch.object(coordinator.api, "update_groups_cache", return_value=None),
+            patch.object(
+                coordinator.api,
+                "get_status_list",
+                return_value=[malformed, empty_id, good],
+            ),
+        ):
+            result = await coordinator._async_update_data()
+
+        assert set(result) == {"good1"}
+        assert result["good1"]["latitude"] == 52.0
+
+    @pytest.mark.asyncio
     async def test_async_shutdown(self, hass: HomeAssistant, mock_config_entry):
         """Test coordinator shutdown."""
         coordinator = LocaDataUpdateCoordinator(hass, mock_config_entry)

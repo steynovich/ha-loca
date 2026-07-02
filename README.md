@@ -136,12 +136,16 @@ The integration supports the following configuration options:
 
 ### Reconfiguration
 
-To modify settings after initial setup:
+To update your credentials (e.g. rotate the API key or change the password):
 1. Go to **Settings** → **Devices & Services**
-2. Find your Loca integration
-3. Click **Configure**
-4. Update your credentials or settings
-5. Click **Submit** to save changes
+2. Find your Loca integration entry
+3. Open the three-dot menu and click **Reconfigure**
+4. Enter the updated credentials (the username must stay the same — add a new
+   entry instead to use a different account)
+5. Click **Submit** — the integration reloads automatically
+
+To change polling options (update interval), click **Configure** on the same
+entry instead.
 
 ### Reauthentication
 

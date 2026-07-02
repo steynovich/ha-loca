@@ -76,7 +76,7 @@ class TestLocaSensor:
         assert sensor.entity_description.native_unit_of_measurement == PERCENTAGE
         assert sensor.entity_description.device_class == SensorDeviceClass.BATTERY
         assert sensor.entity_description.state_class == SensorStateClass.MEASUREMENT
-        assert sensor.entity_description.icon == "mdi:battery"
+        assert sensor.entity_description.icon is None
 
     def test_init_last_seen_sensor(self):
         """Test last seen sensor initialization."""
@@ -87,7 +87,7 @@ class TestLocaSensor:
         assert sensor.entity_description.native_unit_of_measurement is None
         assert sensor.entity_description.device_class == SensorDeviceClass.TIMESTAMP
         assert sensor.entity_description.state_class is None
-        assert sensor.entity_description.icon == "mdi:clock-outline"
+        assert sensor.entity_description.icon is None
 
     def test_init_location_accuracy_sensor(self):
         """Test location accuracy sensor initialization."""
@@ -96,9 +96,9 @@ class TestLocaSensor:
         assert sensor._sensor_type == "location_accuracy"
         assert sensor._attr_unique_id == f"{DOMAIN}_test_device_location_accuracy"
         assert sensor.entity_description.native_unit_of_measurement == "m"
-        assert sensor.entity_description.device_class is None
+        assert sensor.entity_description.device_class == SensorDeviceClass.DISTANCE
         assert sensor.entity_description.state_class == SensorStateClass.MEASUREMENT
-        assert sensor.entity_description.icon == "mdi:crosshairs-gps"
+        assert sensor.entity_description.icon is None
 
     def test_device_data_exists(self):
         """Test device_data property when device exists."""
@@ -118,21 +118,12 @@ class TestLocaSensor:
         sensor = LocaSensor(self.mock_coordinator, self.device_id, "battery")
         assert sensor.device_data == {}
 
-    def test_name_with_device_name(self):
-        """Test name property with device name."""
-        self.mock_coordinator.data = {"test_device": {"name": "My GPS Tracker"}}
-
+    def test_name_resolves_from_translation_key(self):
+        """Test the name comes from the translation catalog, not a property."""
         sensor = LocaSensor(self.mock_coordinator, self.device_id, "battery")
-        # With _attr_has_entity_name = True, name comes from entity_description only
-        assert sensor.name == "Battery"
 
-    def test_name_without_device_name(self):
-        """Test name property without device name."""
-        self.mock_coordinator.data = {"test_device": {}}
-
-        sensor = LocaSensor(self.mock_coordinator, self.device_id, "last_seen")
-        # With _attr_has_entity_name = True, name comes from entity_description only
-        assert sensor.name == "Last Seen"
+        assert sensor._attr_has_entity_name is True
+        assert sensor.entity_description.translation_key == "battery"
 
     def test_native_value_battery(self):
         """Test native_value for battery sensor."""
@@ -305,11 +296,11 @@ class TestLocaSensor:
         assert sensor.icon == "mdi:radar"
 
     def test_icon_property_other_sensors(self):
-        """Test icon property for non-asset sensors uses default."""
+        """Test non-asset sensors set no Python-side icon (icons.json wins)."""
         self.mock_coordinator.data = {"test_device": {"battery_level": 85}}
 
         sensor = LocaSensor(self.mock_coordinator, self.device_id, "battery")
-        assert sensor.icon == "mdi:battery"  # From SENSOR_TYPES
+        assert sensor.icon is None
 
 
 class TestLocaSensorNativeValues:
@@ -403,16 +394,20 @@ class TestLocaSensorNativeValues:
         assert sensor.native_value == "Test Street 42, Amsterdam"
 
     def test_native_value_location_without_address(self):
-        """Test native_value for location sensor without address."""
+        """Test the location sensor reads unknown (None) without an address.
+
+        Regression test: the old "Unknown location" literal was English-only
+        and untranslatable.
+        """
         self.mock_coordinator.data = {"test_device": {}}
         sensor = LocaSensor(self.mock_coordinator, self.device_id, "location")
-        assert sensor.native_value == "Unknown location"
+        assert sensor.native_value is None
 
     def test_native_value_location_empty_address(self):
-        """Test native_value for location sensor with empty address."""
+        """Test the location sensor reads unknown (None) for empty address."""
         self.mock_coordinator.data = {"test_device": {"address": ""}}
         sensor = LocaSensor(self.mock_coordinator, self.device_id, "location")
-        assert sensor.native_value == "Unknown location"
+        assert sensor.native_value is None
 
 
 class TestLocaSensorExtraStateAttributes:
@@ -712,28 +707,65 @@ class TestLocaSensorAvailable:
         assert sensor.available is False
 
 
-class TestLocaSensorName:
-    """Test name property edge cases."""
+class TestEntityTranslationWiring:
+    """Test entities are wired to the translation catalog.
 
-    def setup_method(self):
-        """Set up test method."""
-        self.mock_coordinator = MagicMock()
-        self.mock_coordinator.data = {"test_device": {}}
+    Regression tests: names/icons used to be hardcoded English in the
+    descriptions, leaving the 9-locale translation catalog unreachable.
+    """
 
-    def test_name_returns_none_for_empty_name(self):
-        """Test name returns None when entity_description.name is empty string."""
-        sensor = LocaSensor(self.mock_coordinator, "test_device", "battery")
-        # Override entity_description name to empty string
-        sensor.entity_description = MagicMock()
-        sensor.entity_description.name = ""
-        assert sensor.name is None
+    def test_sensor_descriptions_use_translation_keys(self):
+        """Test every description carries translation_key and no name/icon."""
+        from homeassistant.helpers.typing import UNDEFINED
 
-    def test_name_returns_none_for_none_name(self):
-        """Test name returns None when entity_description.name is None."""
-        sensor = LocaSensor(self.mock_coordinator, "test_device", "battery")
-        sensor.entity_description = MagicMock()
-        sensor.entity_description.name = None
-        assert sensor.name is None
+        for key, description in SENSOR_TYPES.items():
+            assert description.translation_key == key
+            assert description.name is UNDEFINED
+            assert description.icon is None
+
+    def test_sensor_has_no_name_override(self):
+        """Test LocaSensor does not shadow Entity.name (kills translations)."""
+        assert "name" not in LocaSensor.__dict__
+
+    def test_speed_and_accuracy_have_device_classes(self):
+        """Test speed/accuracy sensors declare device class + unit constants."""
+        from homeassistant.const import UnitOfLength, UnitOfSpeed
+
+        speed = SENSOR_TYPES["speed"]
+        assert speed.device_class == SensorDeviceClass.SPEED
+        assert speed.native_unit_of_measurement == UnitOfSpeed.KILOMETERS_PER_HOUR
+
+        accuracy = SENSOR_TYPES["location_accuracy"]
+        assert accuracy.device_class == SensorDeviceClass.DISTANCE
+        assert accuracy.native_unit_of_measurement == UnitOfLength.METERS
+
+    def test_battery_has_no_static_icon_anywhere(self):
+        """Test nothing pins a static battery icon (it would suppress the
+        dynamic battery-level icon derived from device_class + state)."""
+        import json
+        from pathlib import Path
+
+        icons_file = (
+            Path(__file__).parent.parent / "custom_components" / "loca" / "icons.json"
+        )
+        icons = json.loads(icons_file.read_text())
+        assert "battery" not in icons["entity"]["sensor"]
+
+    def test_all_locales_cover_sensor_translation_keys(self):
+        """Test every locale file translates every sensor translation_key."""
+        import json
+        from pathlib import Path
+
+        translations_dir = (
+            Path(__file__).parent.parent / "custom_components" / "loca" / "translations"
+        )
+        locale_files = sorted(translations_dir.glob("*.json"))
+        assert locale_files, "no translation files found"
+        for locale_file in locale_files:
+            catalog = json.loads(locale_file.read_text())["entity"]["sensor"]
+            assert set(catalog) == set(SENSOR_TYPES), locale_file.name
+            for key in SENSOR_TYPES:
+                assert catalog[key].get("name"), f"{locale_file.name}:{key}"
 
 
 class TestLocaSensorAsyncAddNewDevices:
@@ -830,22 +862,20 @@ class TestSensorTypes:
 
         # Check battery sensor config
         battery_config = SENSOR_TYPES["battery"]
-        assert battery_config.name == "Battery"
+        assert battery_config.translation_key == "battery"
         assert battery_config.native_unit_of_measurement == PERCENTAGE
         assert battery_config.device_class == SensorDeviceClass.BATTERY
         assert battery_config.state_class == SensorStateClass.MEASUREMENT
-        assert battery_config.icon == "mdi:battery"
 
         # Check last_seen sensor config
         last_seen_config = SENSOR_TYPES["last_seen"]
-        assert last_seen_config.name == "Last Seen"
+        assert last_seen_config.translation_key == "last_seen"
         assert last_seen_config.device_class == SensorDeviceClass.TIMESTAMP
-        assert last_seen_config.icon == "mdi:clock-outline"
         assert last_seen_config.native_unit_of_measurement is None
 
         # Check location_accuracy sensor config
         accuracy_config = SENSOR_TYPES["location_accuracy"]
-        assert accuracy_config.name == "Location Accuracy"
+        assert accuracy_config.translation_key == "location_accuracy"
         assert accuracy_config.native_unit_of_measurement == "m"
+        assert accuracy_config.device_class == SensorDeviceClass.DISTANCE
         assert accuracy_config.state_class == SensorStateClass.MEASUREMENT
-        assert accuracy_config.icon == "mdi:crosshairs-gps"

@@ -673,20 +673,23 @@ class LocaAPI:
         self, status_entry: dict[str, Any]
     ) -> tuple[dict[str, Any], str, str]:
         """Extract basic device information from status entry."""
-        asset = status_entry.get("Asset", {})
+        # `get(key, {})` does not cover an explicit JSON null - use `or {}`
+        asset = status_entry.get("Asset") or {}
         device_id = str(asset.get("id", ""))
         name = asset.get("label", f"Loca Device {device_id}")
         return asset, device_id, name
 
     def _extract_location_data(
         self, history: dict[str, Any]
-    ) -> tuple[float, float, datetime | None, int | None]:
+    ) -> tuple[float | None, float | None, datetime | None, int | None]:
         """Extract location and timing data from history."""
-        # Use validated coordinates with proper bounds checking
-        latitude, longitude = DataValidator.safe_validate_coordinates(
+        # Use validated coordinates with proper bounds checking; invalid or
+        # missing coordinates become None so the location reads as unknown
+        coordinates = DataValidator.safe_validate_coordinates(
             history.get("latitude"),
             history.get("longitude"),
         )
+        latitude, longitude = coordinates if coordinates else (None, None)
         last_seen = APIResponseHelper.parse_timestamp(history.get("time"))
         # Use validated battery level with proper clamping
         battery_level = DataValidator.validate_battery_level(history.get("charge"))
@@ -709,15 +712,17 @@ class LocaAPI:
         asset, device_id, name = self._extract_device_basic_info(status_entry)
 
         # Extract GPS and location data
-        history = status_entry.get("History", {})
-        spot = status_entry.get("Spot", {})
+        # `get(key, {})` does not cover an explicit JSON null - use `or {}`
+        history = status_entry.get("History") or {}
+        spot = status_entry.get("Spot") or {}
 
+        # Never log the raw History/Spot payloads: they contain exact GPS
+        # coordinates and street addresses
         _LOGGER.debug(
-            "Parsing StatusList entry for device %s: Asset=%s, History=%s, Spot=%s",
+            "Parsing StatusList entry for device %s (history: %s, spot: %s)",
             device_id,
-            asset,
-            history,
-            spot,
+            "present" if history else "missing",
+            "present" if spot else "missing",
         )
 
         # Extract location and timing data
@@ -782,13 +787,17 @@ class LocaAPI:
         device_id = str(location.get("id", ""))
         name = location.get("label", f"Loca Location {device_id}")
 
-        _LOGGER.debug("Parsing location as device: %s", location)
+        # Never log the raw location payload: it contains exact GPS
+        # coordinates and street addresses
+        _LOGGER.debug("Parsing location as device: %s", device_id)
 
-        # Get validated coordinates from location data
-        latitude, longitude = DataValidator.safe_validate_coordinates(
+        # Get validated coordinates from location data; invalid or missing
+        # coordinates become None so the location reads as unknown
+        coordinates = DataValidator.safe_validate_coordinates(
             location.get("latitude", 0),
             location.get("longitude", 0),
         )
+        latitude, longitude = coordinates if coordinates else (None, None)
 
         # Parse timestamp using consolidated helper
         last_seen = APIResponseHelper.parse_timestamp(location.get("update"))

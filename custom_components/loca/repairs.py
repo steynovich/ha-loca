@@ -23,12 +23,14 @@ async def async_create_fix_flow(
     """Create flow."""
     if issue_id == "deprecated_yaml_configuration":
         return DeprecatedYamlConfigurationRepairFlow()
-    if issue_id == "api_authentication_failed":
+    # Issue IDs are suffixed with the config entry id so multiple accounts
+    # get independent repair issues.
+    if issue_id.startswith("api_authentication_failed"):
         entry_id = (
             str(data["entry_id"]) if data and data.get("entry_id") is not None else None
         )
         return ApiAuthenticationFailedRepairFlow(entry_id=entry_id)
-    if issue_id == "no_devices_found":
+    if issue_id.startswith("no_devices_found"):
         return NoDevicesFoundRepairFlow()
 
     return ConfirmRepairFlow()
@@ -140,7 +142,7 @@ def async_create_api_auth_issue(hass: HomeAssistant, config_entry: ConfigEntry) 
     """Create an API authentication issue for a specific config entry."""
     async_create_issue(
         hass,
-        "api_authentication_failed",
+        f"api_authentication_failed_{config_entry.entry_id}",
         "api_authentication_failed",
         translation_placeholders={"account": config_entry.title},
         severity=ir.IssueSeverity.ERROR,
@@ -151,21 +153,24 @@ def async_create_api_auth_issue(hass: HomeAssistant, config_entry: ConfigEntry) 
 def async_create_no_devices_issue(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> None:
-    """Create a no devices found issue."""
+    """Create a no devices found issue for a specific config entry."""
     async_create_issue(
         hass,
-        "no_devices_found",
+        f"no_devices_found_{config_entry.entry_id}",
         "no_devices_found",
         translation_placeholders={"account": config_entry.title},
         severity=ir.IssueSeverity.WARNING,
+        data={"entry_id": config_entry.entry_id},
     )
 
 
-def async_delete_api_auth_issue(hass: HomeAssistant) -> None:
-    """Delete API authentication issue."""
-    async_delete_issue(hass, "api_authentication_failed")
+def async_delete_api_auth_issue(hass: HomeAssistant, config_entry: ConfigEntry) -> None:
+    """Delete the API authentication issue for a specific config entry."""
+    async_delete_issue(hass, f"api_authentication_failed_{config_entry.entry_id}")
 
 
-def async_delete_no_devices_issue(hass: HomeAssistant) -> None:
-    """Delete no devices found issue."""
-    async_delete_issue(hass, "no_devices_found")
+def async_delete_no_devices_issue(
+    hass: HomeAssistant, config_entry: ConfigEntry
+) -> None:
+    """Delete the no devices found issue for a specific config entry."""
+    async_delete_issue(hass, f"no_devices_found_{config_entry.entry_id}")

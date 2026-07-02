@@ -480,6 +480,63 @@ class TestDataParsing:
         assert result["gps_accuracy"] == 1  # Default HDOP value
         assert result["address"] is None
 
+    def test_parse_status_as_device_null_sections(self, api: LocaAPI) -> None:
+        """Test parsing a status entry whose sections are explicit JSON null.
+
+        Regression test: `.get(key, {})` does not default on an explicit null,
+        which used to raise AttributeError and abort the whole poll.
+        """
+        status = {"Asset": {"id": "67890"}, "History": None, "Spot": None}
+
+        result = api.parse_status_as_device(status)
+
+        assert result["device_id"] == "67890"
+        assert result["address"] is None
+        assert result["location_label"] is None
+
+    def test_parse_status_as_device_null_asset(self, api: LocaAPI) -> None:
+        """Test parsing a status entry with a null Asset does not raise."""
+        status = {"Asset": None, "History": None, "Spot": None}
+
+        result = api.parse_status_as_device(status)
+
+        assert result["device_id"] == ""
+
+    def test_parse_status_invalid_coordinates_become_none(self, api: LocaAPI) -> None:
+        """Test invalid coordinates yield None instead of Null Island (0,0)."""
+        status = {
+            "Asset": {"id": "67890"},
+            "History": {"latitude": 95.0, "longitude": 200.0},
+        }
+
+        result = api.parse_status_as_device(status)
+
+        assert result["latitude"] is None
+        assert result["longitude"] is None
+
+    def test_parse_status_does_not_log_coordinates(
+        self, api: LocaAPI, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Test exact GPS coordinates never appear in log output.
+
+        Regression test: parse_status_as_device used to debug-log the full
+        raw History/Spot payloads including coordinates and address.
+        """
+        import logging
+
+        status = {
+            "Asset": {"id": "67890"},
+            "History": {"latitude": 52.1234567, "longitude": 4.7654321},
+            "Spot": {"street": "Privacystraat", "city": "Amsterdam"},
+        }
+
+        with caplog.at_level(logging.DEBUG):
+            api.parse_status_as_device(status)
+
+        assert "52.1234567" not in caplog.text
+        assert "4.7654321" not in caplog.text
+        assert "Privacystraat" not in caplog.text
+
     def test_parse_location_as_device_complete(self, api: LocaAPI) -> None:
         """Test parsing complete location data."""
         location = {

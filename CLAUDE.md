@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is **ha-loca**, a production-ready Home Assistant custom integration for tracking Loca GPS devices. It provides comprehensive device tracking, sensor data, services, diagnostics, and repairs for Loca-branded GPS trackers through their cloud API.
 
-**Current Version**: 2.1.2
+**Current Version**: 2.2.0
 **Integration Type**: Cloud polling hub integration
 **HACS Compatible**: Yes (custom repository)
 
@@ -51,7 +51,7 @@ The integration follows Home Assistant's standard architecture patterns:
    - `diagnostics.py` - Privacy-aware diagnostic data collection
    - `repairs.py` - Automatic issue detection and repair suggestions
    - `validation.py` - Input validation and sanitization
-   - `error_handling.py` - Custom exceptions and error decorators
+   - `error_handling.py` - Custom exceptions, connectivity-error helpers, log sanitization
    - `types.py` - TypedDict definitions for API responses
    - `base.py` - Base entity classes with common functionality
    - `const.py` - Constants, mappings, and configuration
@@ -261,7 +261,7 @@ HomeAssistantError
 ```
 
 ### Error Handling Patterns
-1. **API Errors**: `@handle_api_errors` decorator for consistent handling
+1. **API Errors**: classified in the coordinator (`ConfigEntryAuthFailed` vs `UpdateFailed`); per-entry parse failures are isolated and skipped
 2. **Validation Errors**: Explicit `ValidationError` with user-friendly messages
 3. **Coordinator Errors**: Graceful degradation with `UpdateFailed` exceptions
 4. **Entity Errors**: Fallback to None/Unknown with warning logs
@@ -398,7 +398,8 @@ HomeAssistantError
 
 ## Version History
 
-- **2.0.0** (Current) - Python 3.14 / HA 2026.3.0+ required; options changes now reload automatically; 401 retry on data endpoints; repair flow targets the correct entry; dead code and config duplication cleaned up
+- **2.2.0** (Current) - Fixed refresh_devices targeting, multi-account service unregistration and repair-issue scoping; null-safe status parsing; GPS coordinates removed from logs; tracker availability; translated entity names; reconfigure flow; Location sensor reports `unknown` instead of "Unknown location"
+- **2.0.0** - Python 3.14 / HA 2026.3.0+ required; options changes now reload automatically; 401 retry on data endpoints; repair flow targets the correct entry; dead code and config duplication cleaned up
 - **1.1.6** - Maintenance release with project improvements
 - **1.1.5** - Fixed AttributeError for last_update_success_time
 - **1.1.4** - Entity initialization improvements

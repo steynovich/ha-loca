@@ -24,7 +24,7 @@ API_TIMEOUT: int = 30  # seconds for API request timeout
 
 # Coordinator behavior
 EMPTY_DEVICE_THRESHOLD: int = (
-    2  # Number of consecutive empty device lists before creating repair issue
+    3  # Number of consecutive empty device lists before creating repair issue
 )
 
 

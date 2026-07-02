@@ -18,6 +18,15 @@
           "username": "Benutzername",
           "password": "Passwort"
         }
+      },
+      "reconfigure": {
+        "title": "Loca-Konto neu konfigurieren",
+        "description": "Aktualisiere die Loca-API-Zugangsdaten für {username}.",
+        "data": {
+          "api_key": "API key",
+          "username": "Benutzername",
+          "password": "Passwort"
+        }
       }
     },
     "error": {
@@ -27,7 +36,9 @@
     },
     "abort": {
       "already_configured": "Konto ist bereits konfiguriert",
-      "reauth_successful": "Erneute Authentifizierung erfolgreich"
+      "reauth_successful": "Erneute Authentifizierung erfolgreich",
+      "reconfigure_successful": "Neukonfiguration erfolgreich",
+      "account_mismatch": "Der Benutzername muss mit dem konfigurierten Konto übereinstimmen. Für ein anderes Konto füge einen neuen Integrationseintrag hinzu."
     }
   },
   "options": {
@@ -62,11 +73,7 @@
         "name": "Standort-Update Konfiguration"
       },
       "location": {
-        "name": "Standort",
-        "state": {
-          "unknown_address": "Unbekannte Adresse",
-          "unknown_location": "Unbekannter Standort"
-        }
+        "name": "Standort"
       }
     },
     "device_tracker": {

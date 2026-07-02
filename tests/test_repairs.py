@@ -181,10 +181,11 @@ class TestIssueCreation:
 
             mock_create.assert_called_once_with(
                 hass,
-                "no_devices_found",
+                f"no_devices_found_{mock_config_entry.entry_id}",
                 "no_devices_found",
                 translation_placeholders={"account": mock_config_entry.title},
                 severity=ir.IssueSeverity.WARNING,
+                data={"entry_id": mock_config_entry.entry_id},
             )
 
     @pytest.mark.asyncio
@@ -195,12 +196,89 @@ class TestIssueCreation:
 
             mock_create.assert_called_once_with(
                 hass,
-                "api_authentication_failed",
+                f"api_authentication_failed_{mock_config_entry.entry_id}",
                 "api_authentication_failed",
                 translation_placeholders={"account": mock_config_entry.title},
                 severity=ir.IssueSeverity.ERROR,
                 data={"entry_id": mock_config_entry.entry_id},
             )
+
+
+class TestIssueScoping:
+    """Test that repair issues are scoped per config entry.
+
+    Regression tests: one account's successful poll must not dismiss another
+    account's still-active repair issue.
+    """
+
+    def _make_entry(self, entry_id: str) -> MagicMock:
+        entry = MagicMock()
+        entry.entry_id = entry_id
+        entry.title = f"account-{entry_id}"
+        return entry
+
+    @pytest.mark.asyncio
+    async def test_auth_issue_scoped_per_entry(self, hass: HomeAssistant):
+        """Test deleting entry B's auth issue leaves entry A's issue intact."""
+        from custom_components.loca.repairs import async_delete_api_auth_issue
+
+        entry_a = self._make_entry("entry_a")
+        entry_b = self._make_entry("entry_b")
+
+        async_create_api_auth_issue(hass, entry_a)
+
+        registry = ir.async_get(hass)
+        issue_a_id = f"api_authentication_failed_{entry_a.entry_id}"
+        assert registry.async_get_issue(DOMAIN, issue_a_id) is not None
+
+        # Entry B's successful poll deletes only its own issue
+        async_delete_api_auth_issue(hass, entry_b)
+        assert registry.async_get_issue(DOMAIN, issue_a_id) is not None
+
+        # Entry A's own success clears it
+        async_delete_api_auth_issue(hass, entry_a)
+        assert registry.async_get_issue(DOMAIN, issue_a_id) is None
+
+    @pytest.mark.asyncio
+    async def test_no_devices_issue_scoped_per_entry(self, hass: HomeAssistant):
+        """Test deleting entry B's no-devices issue leaves entry A's intact."""
+        from custom_components.loca.repairs import async_delete_no_devices_issue
+
+        entry_a = self._make_entry("entry_a")
+        entry_b = self._make_entry("entry_b")
+
+        async_create_no_devices_issue(hass, entry_a)
+
+        registry = ir.async_get(hass)
+        issue_a_id = f"no_devices_found_{entry_a.entry_id}"
+        assert registry.async_get_issue(DOMAIN, issue_a_id) is not None
+
+        async_delete_no_devices_issue(hass, entry_b)
+        assert registry.async_get_issue(DOMAIN, issue_a_id) is not None
+
+        async_delete_no_devices_issue(hass, entry_a)
+        assert registry.async_get_issue(DOMAIN, issue_a_id) is None
+
+    @pytest.mark.asyncio
+    async def test_create_fix_flow_matches_scoped_issue_ids(self, hass: HomeAssistant):
+        """Test the fix-flow factory resolves entry-suffixed issue IDs."""
+        from custom_components.loca.repairs import (
+            ApiAuthenticationFailedRepairFlow,
+            NoDevicesFoundRepairFlow,
+            async_create_fix_flow,
+        )
+
+        auth_flow = await async_create_fix_flow(
+            hass,
+            "api_authentication_failed_entry_a",
+            {"entry_id": "entry_a"},
+        )
+        assert isinstance(auth_flow, ApiAuthenticationFailedRepairFlow)
+
+        devices_flow = await async_create_fix_flow(
+            hass, "no_devices_found_entry_a", {"entry_id": "entry_a"}
+        )
+        assert isinstance(devices_flow, NoDevicesFoundRepairFlow)
 
 
 class TestRepairErrorHandling:

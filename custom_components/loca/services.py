@@ -5,10 +5,10 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 
+from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv
-from homeassistant.helpers.service import async_extract_config_entry_ids
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
@@ -69,10 +69,23 @@ class _LocaServices:
                 },
             )
 
+    def _resolve_refresh_targets(self, call: ServiceCall) -> set[str]:
+        """Resolve the config entries targeted by a refresh_devices call.
+
+        An explicit `config_entry_id` field wins; otherwise every loaded
+        Loca entry is refreshed.
+        """
+        if config_entry_id := call.data.get("config_entry_id"):
+            return {config_entry_id}
+        return {
+            entry.entry_id
+            for entry in self._hass.config_entries.async_loaded_entries(DOMAIN)
+        }
+
     async def async_refresh_devices(self, call: ServiceCall) -> None:
         """Refresh devices from Loca API."""
         try:
-            config_entry_ids = await async_extract_config_entry_ids(call)
+            config_entry_ids = self._resolve_refresh_targets(call)
             if not config_entry_ids:
                 raise ServiceValidationError("No Loca config entries found")
 
@@ -81,9 +94,7 @@ class _LocaServices:
                     config_entry_id, self._last_refresh, "rate_limit_refresh"
                 )
 
-            refreshed_count = await self._refresh_entries(config_entry_ids)
-            if refreshed_count == 0:
-                raise ServiceValidationError("No valid Loca config entries to refresh")
+            await self._refresh_entries(config_entry_ids)
 
         except ServiceValidationError:
             raise
@@ -101,22 +112,23 @@ class _LocaServices:
                 f"Unexpected error refreshing devices: {err}"
             ) from err
 
-    async def _refresh_entries(self, config_entry_ids: set[str]) -> int:
+    async def _refresh_entries(self, config_entry_ids: set[str]) -> None:
         """Request a refresh on every Loca config entry in `config_entry_ids`."""
         now = dt_util.utcnow()
-        refreshed_count = 0
         for config_entry_id in config_entry_ids:
             config_entry = self._hass.config_entries.async_get_entry(config_entry_id)
             if not config_entry or config_entry.domain != DOMAIN:
                 raise ServiceValidationError(
                     f"Config entry {config_entry_id} not found or not a Loca entry"
                 )
+            if config_entry.state is not ConfigEntryState.LOADED:
+                raise ServiceValidationError(
+                    f"Config entry {config_entry_id} is not loaded"
+                )
             coordinator = config_entry.runtime_data
             await coordinator.async_request_refresh()
             self._last_refresh[config_entry_id] = now
-            refreshed_count += 1
             _LOGGER.info("Refreshed devices for config entry: %s", config_entry_id)
-        return refreshed_count
 
     async def async_force_update(self, call: ServiceCall) -> None:
         """Force update a specific device."""
@@ -156,6 +168,8 @@ class _LocaServices:
     async def _refresh_device(self, device_id: str) -> bool:
         """Trigger a refresh on the coordinator tracking `device_id`. Returns True if found."""
         for config_entry in self._hass.config_entries.async_entries(DOMAIN):
+            if config_entry.state is not ConfigEntryState.LOADED:
+                continue
             coordinator = config_entry.runtime_data
             if coordinator.data and device_id in coordinator.data:
                 await coordinator.async_request_refresh()
